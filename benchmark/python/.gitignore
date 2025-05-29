@@ -1,0 +1,28 @@
+# Python 虚拟环境
+venv/
+env/
+.venv/
+
+# Python 字节码文件
+__pycache__/
+*.py[cod]
+*$py.class
+
+# 测试结果文件
+*.docx
+test_output/
+benchmark_results/
+
+# 性能分析文件
+*.prof
+*.profile
+
+# IDE 文件
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# 操作系统生成的文件
+.DS_Store
+Thumbs.db 

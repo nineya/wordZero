@@ -1,0 +1,86 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg width="200" height="80" viewBox="0 0 200 80" xmlns="http://www.w3.org/2000/svg">
+  <!-- 背景 -->
+  <defs>
+    <linearGradient id="bgGradient" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#00ADD8;stop-opacity:0.1" />
+      <stop offset="100%" style="stop-color:#00ADD8;stop-opacity:0.05" />
+    </linearGradient>
+    
+    <!-- 文档页面渐变 -->
+    <linearGradient id="pageGradient" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#ffffff;stop-opacity:1" />
+      <stop offset="100%" style="stop-color:#f8f9fa;stop-opacity:1" />
+    </linearGradient>
+    
+    <!-- Go语言蓝色 -->
+    <linearGradient id="goBlue" x1="0%" y1="0%" x2="100%" y2="0%">
+      <stop offset="0%" style="stop-color:#00ADD8;stop-opacity:1" />
+      <stop offset="100%" style="stop-color:#0077BE;stop-opacity:1" />
+    </linearGradient>
+  </defs>
+  
+  <!-- 背景矩形 -->
+  <rect width="200" height="80" fill="url(#bgGradient)" rx="8"/>
+  
+  <!-- 左侧图标区域 -->
+  <g transform="translate(12, 12)">
+    <!-- 文档页面 -->
+    <rect x="2" y="4" width="24" height="32" fill="url(#pageGradient)" stroke="#e1e5e9" stroke-width="1" rx="2"/>
+    <rect x="6" y="2" width="24" height="32" fill="url(#pageGradient)" stroke="#e1e5e9" stroke-width="1" rx="2"/>
+    <rect x="10" y="0" width="24" height="32" fill="url(#pageGradient)" stroke="#e1e5e9" stroke-width="1" rx="2"/>
+    
+    <!-- 文档内容线条 -->
+    <line x1="14" y1="6" x2="30" y2="6" stroke="#00ADD8" stroke-width="2" stroke-linecap="round"/>
+    <line x1="14" y1="10" x2="28" y2="10" stroke="#00ADD8" stroke-width="1.5" stroke-linecap="round"/>
+    <line x1="14" y1="14" x2="26" y2="14" stroke="#00ADD8" stroke-width="1" stroke-linecap="round"/>
+    <line x1="14" y1="18" x2="29" y2="18" stroke="#00ADD8" stroke-width="1" stroke-linecap="round"/>
+    
+    <!-- 零符号 (表示Zero) -->
+    <circle cx="40" cy="16" r="8" fill="none" stroke="url(#goBlue)" stroke-width="3"/>
+    <circle cx="40" cy="16" r="4" fill="url(#goBlue)" opacity="0.3"/>
+  </g>
+  
+  <!-- 文字Logo -->
+  <g transform="translate(60, 25)">
+    <!-- Word文字 -->
+    <text x="0" y="0" font-family="'Segoe UI', 'Helvetica Neue', Arial, sans-serif" 
+          font-size="22" font-weight="700" fill="#2c3e50">Word</text>
+    
+    <!-- Zero文字 -->
+    <text x="55" y="0" font-family="'Segoe UI', 'Helvetica Neue', Arial, sans-serif" 
+          font-size="22" font-weight="300" fill="url(#goBlue)">Zero</text>
+    
+    <!-- 副标题 -->
+    <text x="0" y="20" font-family="'Segoe UI', 'Helvetica Neue', Arial, sans-serif" 
+          font-size="9" font-weight="400" fill="#7f8c8d" letter-spacing="0.5px">
+      GOLANG WORD LIBRARY
+    </text>
+    
+    <!-- 性能标识 -->
+    <g transform="translate(0, 28)">
+      <rect width="32" height="12" fill="#00ADD8" rx="6" opacity="0.9"/>
+      <text x="16" y="8" font-family="'Segoe UI', sans-serif" 
+            font-size="7" font-weight="600" fill="white" text-anchor="middle">2.62ms</text>
+    </g>
+    
+    <g transform="translate(36, 28)">
+      <rect width="28" height="12" fill="#27ae60" rx="6" opacity="0.9"/>
+      <text x="14" y="8" font-family="'Segoe UI', sans-serif" 
+            font-size="7" font-weight="600" fill="white" text-anchor="middle">ZERO</text>
+    </g>
+    
+    <g transform="translate(68, 28)">
+      <rect width="24" height="12" fill="#e74c3c" rx="6" opacity="0.9"/>
+      <text x="12" y="8" font-family="'Segoe UI', sans-serif" 
+            font-size="7" font-weight="600" fill="white" text-anchor="middle">DEPS</text>
+    </g>
+  </g>
+  
+  <!-- 装饰性元素 - Go语言风格的几何图形 -->
+  <g opacity="0.6">
+    <polygon points="180,20 185,15 190,20 185,25" fill="#00ADD8"/>
+    <polygon points="175,30 180,25 185,30 180,35" fill="#00ADD8" opacity="0.7"/>
+    <polygon points="185,40 190,35 195,40 190,45" fill="#00ADD8" opacity="0.5"/>
+  </g>
+</svg> 

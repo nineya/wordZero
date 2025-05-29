@@ -1,0 +1,23 @@
+{
+  "name": "wordZero-benchmark-js",
+  "version": "1.0.0",
+  "description": "JavaScript Word操作性能测试对比",
+  "main": "benchmark.js",
+  "scripts": {
+    "test": "node benchmark.js",
+    "benchmark": "node benchmark.js"
+  },
+  "dependencies": {
+    "docx": "^8.5.0",
+    "officegen": "^0.6.5",
+    "fs-extra": "^11.1.1"
+  },
+  "devDependencies": {
+    "benchmark": "^2.1.4"
+  },
+  "engines": {
+    "node": ">=16.0.0"
+  },
+  "author": "WordZero Benchmark Team",
+  "license": "MIT"
+} 

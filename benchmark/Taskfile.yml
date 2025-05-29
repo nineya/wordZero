@@ -1,0 +1,307 @@
+# WordZero 性能基准测试 Taskfile
+
+version: '3'
+
+env:
+  BENCHMARK_TIMEOUT: 30m
+
+tasks:
+  default:
+    desc: "运行完整的性能基准测试流程"
+    deps: [setup]
+    cmds:
+      - task: benchmark-all
+      - task: compare
+
+  help:
+    desc: "显示帮助信息"
+    cmds:
+      - echo "WordZero 性能基准测试"
+      - echo ""
+      - echo '可用命令'
+      - echo "  task setup          - 安装所有依赖（自动创建Python虚拟环境）"
+      - echo "  task setup-python-ssl-fix - 设置Python环境（解决SSL证书问题）"
+      - echo "  task benchmark-all  - 运行所有平台的性能测试（Go标准基准测试）"
+      - echo "  task benchmark-all-fixed - 运行所有平台的固定迭代次数测试（推荐用于对比）"
+      - echo "  task benchmark-golang - 运行Golang性能测试（Go标准基准测试）"
+      - echo "  task benchmark-golang-fixed - 运行Golang固定迭代次数测试"
+      - echo "  task benchmark-js   - 运行JavaScript性能测试"
+      - echo "  task benchmark-python - 运行Python性能测试（使用虚拟环境）"
+      - echo "  task compare        - 生成性能对比分析"
+      - echo "  task clean          - 清理生成的文件"
+      - echo "  task clean-all      - 完整清理（包括依赖和虚拟环境）"
+      - echo "  task benchmark-quick - 运行快速性能测试"
+      - echo "  task benchmark-memory - 运行内存使用测试"
+      - echo "  task report         - 生成测试报告"
+      - echo "  task help           - 显示帮助信息"
+      - echo ""
+      - echo '注意 - Python 测试使用虚拟环境，避免与系统 Python 冲突'
+      - echo 'SSL问题 - 如果遇到SSL证书错误，请使用 task setup-python-ssl-fix'
+
+  # 环境设置任务
+  setup:
+    desc: "安装所有依赖"
+    deps: [setup-golang, setup-js, setup-python]
+    cmds:
+      - echo "所有环境设置完成"
+
+  setup-golang:
+    desc: "设置Golang环境"
+    dir: golang
+    cmds:
+      - echo "设置Golang环境..."
+      - go mod tidy
+      - cmd: mkdir -p ../results/golang
+        platforms: [linux, darwin]
+      - cmd: mkdir "..\results\golang" 2>nul || exit /b 0
+        platforms: [windows]
+
+  setup-js:
+    desc: "设置JavaScript环境"
+    dir: javascript
+    cmds:
+      - echo "设置JavaScript环境..."
+      - npm install
+      - cmd: mkdir -p ../results/javascript
+        platforms: [linux, darwin]
+      - cmd: mkdir "..\results\javascript" 2>nul || exit /b 0
+        platforms: [windows]
+
+  setup-python:
+    desc: "设置Python环境（创建虚拟环境并安装依赖）"
+    dir: python
+    cmds:
+      - echo "设置Python环境..."
+      - echo "创建虚拟环境..."
+      - python -m venv venv
+      - echo "激活虚拟环境并安装依赖..."
+      - cmd: |
+          source venv/bin/activate
+          pip install --upgrade pip
+          pip install --trusted-host pypi.org --trusted-host pypi.python.org --trusted-host files.pythonhosted.org -r requirements.txt
+        platforms: [linux, darwin]
+      - cmd: |
+          venv\Scripts\python.exe -m pip install --upgrade pip
+          venv\Scripts\pip.exe install --trusted-host pypi.org --trusted-host pypi.python.org --trusted-host files.pythonhosted.org -r requirements.txt
+        platforms: [windows]
+      - cmd: mkdir -p ../results/python
+        platforms: [linux, darwin]
+      - cmd: mkdir "..\results\python" 2>nul || exit /b 0
+        platforms: [windows]
+
+  setup-python-ssl-fix:
+    desc: "设置Python环境（解决SSL证书问题）"
+    dir: python
+    cmds:
+      - echo "设置Python环境（SSL证书修复模式）..."
+      - echo "创建虚拟环境..."
+      - python -m venv venv
+      - echo "激活虚拟环境并安装依赖（跳过SSL验证）..."
+      - cmd: |
+          source venv/bin/activate
+          pip install --upgrade pip --trusted-host pypi.org --trusted-host pypi.python.org --trusted-host files.pythonhosted.org
+          pip config set global.trusted-host "pypi.org files.pythonhosted.org pypi.python.org"
+          pip install -r requirements.txt
+        platforms: [linux, darwin]
+      - cmd: |
+          venv\Scripts\python.exe -m pip install --upgrade pip --trusted-host pypi.org --trusted-host pypi.python.org --trusted-host files.pythonhosted.org
+          venv\Scripts\pip.exe config set global.trusted-host "pypi.org files.pythonhosted.org pypi.python.org"
+          venv\Scripts\pip.exe install -r requirements.txt
+        platforms: [windows]
+      - cmd: mkdir -p ../results/python
+        platforms: [linux, darwin]
+      - cmd: mkdir "..\results\python" 2>nul || exit /b 0
+        platforms: [windows]
+
+  # 性能测试任务
+  benchmark-all:
+    desc: "运行所有平台的性能测试"
+    deps: [benchmark-golang, benchmark-js, benchmark-python]
+    cmds:
+      - echo "所有性能测试完成"
+
+  # 固定迭代次数的对比测试（推荐使用）
+  benchmark-all-fixed:
+    desc: "运行所有平台的固定迭代次数性能测试（推荐用于对比）"
+    deps: [benchmark-golang-fixed, benchmark-js, benchmark-python]
+    cmds:
+      - echo "所有固定迭代次数性能测试完成"
+
+  benchmark-golang:
+    desc: "运行Golang性能测试（Go标准基准测试）"
+    dir: golang
+    cmds:
+      - echo "运行Golang性能测试..."
+      - cmd: go test -bench=. -benchmem -timeout={{.BENCHMARK_TIMEOUT}} | tee ../results/golang/benchmark_output.txt
+        platforms: [linux, darwin]
+      - cmd: go test -bench=. -benchmem -timeout={{.BENCHMARK_TIMEOUT}} > ..\results\golang\benchmark_output.txt
+        platforms: [windows]
+
+  benchmark-golang-fixed:
+    desc: "运行Golang固定迭代次数性能测试（与其他语言保持一致）"
+    dir: golang
+    cmds:
+      - echo "运行Golang固定迭代次数性能测试..."
+      - cmd: go test -run=TestFixedIterationsPerformance -timeout={{.BENCHMARK_TIMEOUT}} | tee ../results/golang/fixed_benchmark_output.txt
+        platforms: [linux, darwin]
+      - cmd: go test -run=TestFixedIterationsPerformance -timeout={{.BENCHMARK_TIMEOUT}} > ..\results\golang\fixed_benchmark_output.txt
+        platforms: [windows]
+
+  benchmark-js:
+    desc: "运行JavaScript性能测试"
+    dir: javascript
+    cmds:
+      - echo "运行JavaScript性能测试..."
+      - npm test
+
+  benchmark-python:
+    desc: "运行Python性能测试"
+    dir: python
+    cmds:
+      - echo "运行Python性能测试..."
+      - cmd: |
+          source venv/bin/activate
+          python benchmark_test.py
+        platforms: [linux, darwin]
+      - cmd: |
+          ./venv/Scripts/python.exe benchmark_test.py
+        platforms: [windows]
+
+  # 分析和报告任务
+  compare:
+    desc: "生成性能对比分析"
+    dir: python
+    cmds:
+      - echo "生成性能对比分析..."
+      - cmd: |
+          source venv/bin/activate
+          python ../compare_results.py
+        platforms: [linux, darwin]
+      - cmd: |
+          ./venv/Scripts/python.exe ../compare_results.py
+        platforms: [windows]
+
+  report:
+    desc: "生成测试报告"
+    deps: [compare]
+    cmds:
+      - echo '性能测试报告已生成'
+      - echo '- 详细报告 -> results/detailed_comparison_report.md'
+      - echo '- 图表目录 -> results/charts/'
+      - echo '- 各平台结果 -> results/*/performance_report.json'
+
+  # 快速测试任务
+  benchmark-quick:
+    desc: "运行快速性能测试（少量迭代）"
+    cmds:
+      - echo "运行快速性能测试..."
+      - task: benchmark-quick-golang
+      - task: benchmark-quick-js
+      - task: benchmark-quick-python
+
+  benchmark-quick-golang:
+    desc: "运行Golang快速性能测试"
+    dir: golang
+    cmds:
+      - go test -bench=BenchmarkCreateBasicDocument -benchtime=10x
+
+  benchmark-quick-js:
+    desc: "运行JavaScript快速性能测试"
+    dir: javascript
+    cmds:
+      - node -e "require('./benchmark.js').testBasicDocumentCreation(0)"
+
+  benchmark-quick-python:
+    desc: "运行Python快速性能测试"
+    dir: python
+    cmds:
+      - cmd: |
+          source venv/bin/activate
+          python -c "from benchmark_test import test_basic_document_creation; test_basic_document_creation(0)"
+        platforms: [linux, darwin]
+      - cmd: |
+          ./venv/Scripts/python.exe -c "from benchmark_test import test_basic_document_creation; test_basic_document_creation(0)"
+        platforms: [windows]
+
+  # 内存测试任务
+  benchmark-memory:
+    desc: "运行内存使用测试"
+    cmds:
+      - echo "运行内存使用测试..."
+      - task: benchmark-memory-golang
+      - task: benchmark-memory-js
+      - task: benchmark-memory-python
+
+  benchmark-memory-golang:
+    desc: "运行Golang内存测试"
+    dir: golang
+    cmds:
+      - go test -bench=BenchmarkMemoryUsage -benchmem
+
+  benchmark-memory-js:
+    desc: "运行JavaScript内存测试"
+    dir: javascript
+    cmds:
+      - node -e "require('./benchmark.js').testMemoryUsage(0)"
+
+  benchmark-memory-python:
+    desc: "运行Python内存测试"
+    dir: python
+    cmds:
+      - cmd: |
+          source venv/bin/activate
+          python -c "from benchmark_test import test_memory_usage; test_memory_usage(0)"
+        platforms: [linux, darwin]
+      - cmd: |
+          ./venv/Scripts/python.exe -c "from benchmark_test import test_memory_usage; test_memory_usage(0)"
+        platforms: [windows]
+
+  # 清理任务
+  clean:
+    desc: "清理生成的文件"
+    cmds:
+      - echo "清理生成的文件..."
+      - cmd: rm -rf results/golang/*.docx results/javascript/*.docx results/python/*.docx results/charts/ results/*.md results/*.json
+        platforms: [linux, darwin]
+      - cmd: |
+          if exist "results\golang\*.docx" del /q "results\golang\*.docx"
+          if exist "results\javascript\*.docx" del /q "results\javascript\*.docx"
+          if exist "results\python\*.docx" del /q "results\python\*.docx"
+          if exist "results\charts" rmdir /s /q "results\charts"
+          if exist "results\*.md" del /q "results\*.md"
+          if exist "results\*.json" del /q "results\*.json"
+        platforms: [windows]
+
+  clean-all:
+    desc: "完整清理（包括依赖）"
+    deps: [clean]
+    cmds:
+      - echo "完整清理..."
+      - task: clean-golang
+      - task: clean-js
+      - task: clean-python
+
+  clean-golang:
+    desc: "清理Golang环境"
+    dir: golang
+    cmds:
+      - go clean
+
+  clean-js:
+    desc: "清理JavaScript环境"
+    dir: javascript
+    cmds:
+      - cmd: rm -rf node_modules
+        platforms: [linux, darwin]
+      - cmd: rmdir /s /q "node_modules" 2>nul || exit /b 0
+        platforms: [windows]
+
+  clean-python:
+    desc: "清理Python环境（删除虚拟环境）"
+    dir: python
+    cmds:
+      - echo "清理Python虚拟环境..."
+      - cmd: rm -rf venv
+        platforms: [linux, darwin]
+      - cmd: rmdir /s /q "venv" 2>nul || exit /b 0
+        platforms: [windows] 

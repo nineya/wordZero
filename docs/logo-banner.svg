@@ -1,0 +1,99 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg width="400" height="120" viewBox="0 0 400 120" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <!-- 背景渐变 -->
+    <linearGradient id="bgGradient" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#00ADD8;stop-opacity:0.05" />
+      <stop offset="100%" style="stop-color:#00ADD8;stop-opacity:0.15" />
+    </linearGradient>
+    
+    <!-- Go语言蓝色渐变 -->
+    <linearGradient id="goBlue" x1="0%" y1="0%" x2="100%" y2="0%">
+      <stop offset="0%" style="stop-color:#00ADD8;stop-opacity:1" />
+      <stop offset="100%" style="stop-color:#0077BE;stop-opacity:1" />
+    </linearGradient>
+    
+    <!-- 文档页面渐变 -->
+    <linearGradient id="pageGradient" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#ffffff;stop-opacity:1" />
+      <stop offset="100%" style="stop-color:#f8f9fa;stop-opacity:1" />
+    </linearGradient>
+  </defs>
+  
+  <!-- 背景 -->
+  <rect width="400" height="120" fill="url(#bgGradient)" rx="12"/>
+  
+  <!-- 左侧图标区域 -->
+  <g transform="translate(20, 20)">
+    <!-- 层叠文档效果 -->
+    <rect x="4" y="8" width="40" height="52" fill="url(#pageGradient)" stroke="#e1e5e9" stroke-width="1.5" rx="3"/>
+    <rect x="8" y="4" width="40" height="52" fill="url(#pageGradient)" stroke="#e1e5e9" stroke-width="1.5" rx="3"/>
+    <rect x="12" y="0" width="40" height="52" fill="url(#pageGradient)" stroke="#e1e5e9" stroke-width="1.5" rx="3"/>
+    
+    <!-- 主文档内容 -->
+    <line x1="18" y1="12" x2="46" y2="12" stroke="url(#goBlue)" stroke-width="3" stroke-linecap="round"/>
+    <line x1="18" y1="18" x2="42" y2="18" stroke="url(#goBlue)" stroke-width="2" stroke-linecap="round"/>
+    <line x1="18" y1="24" x2="44" y2="24" stroke="url(#goBlue)" stroke-width="1.5" stroke-linecap="round"/>
+    <line x1="18" y1="30" x2="40" y2="30" stroke="url(#goBlue)" stroke-width="1.5" stroke-linecap="round"/>
+    <line x1="18" y1="36" x2="45" y2="36" stroke="url(#goBlue)" stroke-width="1.5" stroke-linecap="round"/>
+    
+    <!-- Zero符号 -->
+    <circle cx="65" cy="26" r="12" fill="none" stroke="url(#goBlue)" stroke-width="4"/>
+    <circle cx="65" cy="26" r="6" fill="url(#goBlue)" opacity="0.4"/>
+  </g>
+  
+  <!-- 主标题 -->
+  <g transform="translate(120, 45)">
+    <text x="0" y="0" font-family="'Segoe UI', 'Helvetica Neue', Arial, sans-serif" 
+          font-size="36" font-weight="700" fill="#2c3e50">Word</text>
+    <text x="90" y="0" font-family="'Segoe UI', 'Helvetica Neue', Arial, sans-serif" 
+          font-size="36" font-weight="300" fill="url(#goBlue)">Zero</text>
+    
+    <!-- 副标题 -->
+    <text x="0" y="25" font-family="'Segoe UI', 'Helvetica Neue', Arial, sans-serif" 
+          font-size="14" font-weight="400" fill="#7f8c8d" letter-spacing="1px">
+      高性能 Golang Word 文档操作库
+    </text>
+    
+    <!-- 特性标签 -->
+    <g transform="translate(0, 40)">
+      <rect width="60" height="18" fill="#00ADD8" rx="9" opacity="0.9"/>
+      <text x="30" y="12" font-family="'Segoe UI', sans-serif" 
+            font-size="10" font-weight="600" fill="white" text-anchor="middle">
+        ⚡ 2.62ms
+      </text>
+    </g>
+    
+    <g transform="translate(70, 40)">
+      <rect width="70" height="18" fill="#27ae60" rx="9" opacity="0.9"/>
+      <text x="35" y="12" font-family="'Segoe UI', sans-serif" 
+            font-size="10" font-weight="600" fill="white" text-anchor="middle">
+        🚀 零依赖
+      </text>
+    </g>
+    
+    <g transform="translate(150, 40)">
+      <rect width="80" height="18" fill="#e74c3c" rx="9" opacity="0.9"/>
+      <text x="40" y="12" font-family="'Segoe UI', sans-serif" 
+            font-size="10" font-weight="600" fill="white" text-anchor="middle">
+        📄 OOXML
+      </text>
+    </g>
+  </g>
+  
+  <!-- 右侧装饰元素 -->
+  <g transform="translate(320, 20)" opacity="0.6">
+    <!-- Go语言风格的几何图案 -->
+    <polygon points="0,10 8,0 16,10 8,20" fill="#00ADD8" opacity="0.8"/>
+    <polygon points="20,25 28,15 36,25 28,35" fill="#00ADD8" opacity="0.6"/>
+    <polygon points="10,40 18,30 26,40 18,50" fill="#00ADD8" opacity="0.4"/>
+    <polygon points="30,55 38,45 46,55 38,65" fill="#00ADD8" opacity="0.3"/>
+    
+    <!-- 性能指示器 -->
+    <g transform="translate(50, 30)">
+      <circle cx="0" cy="0" r="3" fill="#27ae60"/>
+      <circle cx="0" cy="10" r="2" fill="#f39c12"/>
+      <circle cx="0" cy="18" r="1.5" fill="#e74c3c"/>
+    </g>
+  </g>
+</svg> 

@@ -1,0 +1,56 @@
+# 输出目录
+examples/output/
+*/output/
+output/
+
+# IDE和编辑器文件
+.cursor/
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+debug.go
+
+# 测试文档文件
+*.docx
+*.doc
+!demo_document.docx
+
+.vscode/
+
+unzip_tool.exe
+
+# Go相关
+*.exe
+*.exe~
+*.dll
+*.so
+*.dylib
+*.test
+*.out
+go.work
+go.work.sum
+
+# 依赖和vendor
+vendor/
+
+# 临时文件
+*.tmp
+*.temp
+*.log
+
+# 系统文件
+.DS_Store
+Thumbs.db
+
+# 构建输出
+bin/
+dist/
+build/ 
+benchmark/results/golang
+benchmark/results/javascript
+benchmark/results/python
+benchmark/python/venv
+benchmark/javascript/node_modules
+benchmark/javascript/package-lock.json
