@@ -11,6 +11,7 @@ import (
 	"path/filepath"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/ZeroHawkeye/wordZero/pkg/style"
 )
@@ -93,9 +94,11 @@ func (t *Table) ElementType() string {
 
 // Paragraph 表示一个段落
 type Paragraph struct {
-	XMLName    xml.Name             `xml:"w:p"`
-	Properties *ParagraphProperties `xml:"w:pPr,omitempty"`
-	Runs       []Run                `xml:"w:r"`
+	XMLName       xml.Name             `xml:"w:p"`
+	Properties    *ParagraphProperties `xml:"w:pPr,omitempty"`
+	BookmarkStart *BookmarkStart       `xml:"w:bookmarkStart,omitempty"`
+	Runs          []Run                `xml:"w:r"`
+	BookmarkEnd   *BookmarkEnd         `xml:"w:bookmarkEnd,omitempty"`
 }
 
 // ParagraphProperties 段落属性
@@ -146,6 +149,7 @@ type Justification struct {
 type Run struct {
 	XMLName    xml.Name        `xml:"w:r"`
 	Properties *RunProperties  `xml:"w:rPr,omitempty"`
+	Tab        *TabDef         `xml:"w:tab,omitempty"`
 	Text       Text            `xml:"w:t,omitempty"`
 	Drawing    *DrawingElement `xml:"w:drawing,omitempty"`
 	FieldChar  *FieldChar      `xml:"w:fldChar,omitempty"`
@@ -732,7 +736,7 @@ func (p *Paragraph) SetSpacing(config *SpacingConfig) {
 	}
 
 	if config != nil {
-		spacing := &Spacing{}
+		spacing := &Spacing{LineRule: "auto"}
 
 		if config.BeforePara > 0 {
 			// 转换为TWIPs (1/20磅)
@@ -873,7 +877,7 @@ func (p *Paragraph) AddFormattedText(text string, format *TextFormat) {
 //	// 添加三级标题
 //	h3 := doc.AddHeadingParagraph("1.1.1 研究目标", 3)
 func (d *Document) AddHeadingParagraph(text string, level int) *Paragraph {
-	return d.AddHeadingParagraphWithBookmark(text, level, "")
+	return d.AddHeadingParagraphWithBookmark(text, level, false)
 }
 
 // AddHeadingParagraphWithBookmark 向文档添加一个带书签的标题段落。
@@ -898,14 +902,14 @@ func (d *Document) AddHeadingParagraph(text string, level int) *Paragraph {
 //
 //	// 添加自动生成书签名的三级标题
 //	h3 := doc.AddHeadingParagraphWithBookmark("1.1.1 研究目标", 3, "auto_bookmark")
-func (d *Document) AddHeadingParagraphWithBookmark(text string, level int, bookmarkName string) *Paragraph {
+func (d *Document) AddHeadingParagraphWithBookmark(text string, level int, addBookmark bool) *Paragraph {
 	if level < 1 || level > 9 {
 		Debugf("标题级别 %d 超出范围，使用默认级别 1", level)
 		level = 1
 	}
 
 	styleID := fmt.Sprintf("Heading%d", level)
-	Debugf("添加标题段落: %s (级别: %d, 样式: %s, 书签: %s)", text, level, styleID, bookmarkName)
+	Debugf("添加标题段落: %s (级别: %d, 样式: %s, 书签: %t)", text, level, styleID, addBookmark)
 
 	// 获取样式管理器中的样式
 	headingStyle := d.styleManager.GetStyle(styleID)
@@ -965,20 +969,6 @@ func (d *Document) AddHeadingParagraphWithBookmark(text string, level int, bookm
 	// 创建段落的Run列表
 	runs := make([]Run, 0)
 
-	// 如果需要添加书签，在段落开始处添加书签开始标记
-	if bookmarkName != "" {
-		// 生成唯一的书签ID
-		bookmarkID := fmt.Sprintf("bookmark_%d_%s", len(d.Body.Elements), bookmarkName)
-
-		// 添加书签开始标记作为单独的元素到文档主体中
-		d.Body.Elements = append(d.Body.Elements, &BookmarkStart{
-			ID:   bookmarkID,
-			Name: bookmarkName,
-		})
-
-		Debugf("添加书签开始: ID=%s, Name=%s", bookmarkID, bookmarkName)
-	}
-
 	// 添加文本内容
 	runs = append(runs, Run{
 		Properties: runProps,
@@ -994,19 +984,25 @@ func (d *Document) AddHeadingParagraphWithBookmark(text string, level int, bookm
 		Runs:       runs,
 	}
 
-	d.Body.Elements = append(d.Body.Elements, p)
+	// 如果需要添加书签，在段落开始处添加书签开始标记
+	if addBookmark {
+		// 生成唯一的书签ID
+		bookmarkID := fmt.Sprintf("_Toc_%d_%d", len(d.Body.Elements), time.Now().UnixMilli())
 
-	// 如果需要添加书签，在段落结束后添加书签结束标记
-	if bookmarkName != "" {
-		bookmarkID := fmt.Sprintf("bookmark_%d_%s", len(d.Body.Elements)-2, bookmarkName) // -2 因为段落已经添加了
+		// 创建书签实体
+		p.BookmarkStart = &BookmarkStart{
+			ID:   bookmarkID,
+			Name: bookmarkID,
+		}
+		Debugf("添加书签开始: ID=%s", bookmarkID)
 
-		// 添加书签结束标记
-		d.Body.Elements = append(d.Body.Elements, &BookmarkEnd{
+		p.BookmarkEnd = &BookmarkEnd{
 			ID: bookmarkID,
-		})
-
+		}
 		Debugf("添加书签结束: ID=%s", bookmarkID)
 	}
+
+	d.Body.Elements = append(d.Body.Elements, p)
 
 	return p
 }

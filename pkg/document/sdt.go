@@ -231,7 +231,7 @@ func (sdt *SDT) AddTOCEntry(text string, level int, pageNum int, entryID string)
 				Text: Text{Content: text},
 			},
 			Run{
-				Text: Text{Content: "\t"},
+				Tab: &TabDef{},
 			},
 			Run{FieldChar: &FieldChar{FieldCharType: "begin"}},
 			Run{

@@ -103,9 +103,10 @@ func (d *Document) GenerateTOC(config *TOCConfig) error {
 }
 
 // UpdateTOC 更新目录
-func (d *Document) UpdateTOC() error {
-	// 重新收集标题信息
-	entries := d.collectHeadings(9) // 收集所有级别
+func (d *Document) UpdateTOC(config *TOCConfig) error {
+	if config == nil {
+		config = DefaultTOCConfig()
+	}
 
 	// 查找现有目录
 	tocStart := d.findTOCStart()
@@ -113,16 +114,23 @@ func (d *Document) UpdateTOC() error {
 		return fmt.Errorf("未找到目录")
 	}
 
-	// 删除现有目录条目
-	d.removeTOCEntries(tocStart)
+	// 重新收集标题信息
+	entries := d.collectHeadings(config.MaxLevel)
 
-	// 重新生成目录条目
-	config := DefaultTOCConfig()
+	// 创建目录SDT
+	tocSDT := d.CreateTOCSDT(config.Title, config.MaxLevel)
+
+	// 为每个标题条目添加到目录中
 	for _, entry := range entries {
-		if err := d.addTOCEntry(entry, config); err != nil {
-			return fmt.Errorf("更新目录条目失败: %v", err)
-		}
+		//entryID := fmt.Sprintf("14746%d", 3000+i)
+		tocSDT.AddTOCEntry(entry.Text, entry.Level, entry.PageNum, entry.BookmarkID)
 	}
+
+	// 完成目录SDT构建
+	tocSDT.FinalizeTOCSDT()
+
+	// 添加到文档中
+	d.Body.Elements[tocStart] = tocSDT
 
 	return nil
 }
@@ -174,13 +182,17 @@ func (d *Document) collectHeadings(maxLevel int) []TOCEntry {
 		if paragraph, ok := element.(*Paragraph); ok {
 			level := d.getHeadingLevel(paragraph)
 			if level > 0 && level <= maxLevel {
+				bookmarkID := ""
+				if paragraph.BookmarkStart != nil {
+					bookmarkID = paragraph.BookmarkStart.Name
+				}
 				text := d.extractParagraphText(paragraph)
 				if text != "" {
 					entry := TOCEntry{
 						Text:       text,
 						Level:      level,
 						PageNum:    pageNum,
-						BookmarkID: fmt.Sprintf("_Toc_%s", strings.ReplaceAll(text, " ", "_")),
+						BookmarkID: bookmarkID,
 					}
 					entries = append(entries, entry)
 				}
