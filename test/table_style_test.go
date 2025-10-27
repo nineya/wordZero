@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"testing"
 
-	"github.com/ZeroHawkeye/wordZero/pkg/document"
+	"github.com/nineya/wordZero/pkg/document"
 )
 
 // TestTableBorders 测试表格边框功能

@@ -8,8 +8,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/ZeroHawkeye/wordZero/pkg/document"
-	"github.com/ZeroHawkeye/wordZero/pkg/style"
+	"github.com/nineya/wordZero/pkg/document"
+	"github.com/nineya/wordZero/pkg/style"
 )
 
 // 统一的测试配置，与JavaScript和Python保持一致

@@ -4,7 +4,7 @@ import (
 	"os"
 	"testing"
 
-	"github.com/ZeroHawkeye/wordZero/pkg/document"
+	"github.com/nineya/wordZero/pkg/document"
 )
 
 func TestCreateDocument(t *testing.T) {

@@ -5,7 +5,7 @@ import (
 	"regexp"
 	"strings"
 
-	"github.com/ZeroHawkeye/wordZero/pkg/document"
+	"github.com/nineya/wordZero/pkg/document"
 	"github.com/yuin/goldmark/ast"
 
 	// 添加goldmark扩展的AST节点支持

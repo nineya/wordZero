@@ -5,7 +5,7 @@ import (
 	"os"
 	"testing"
 
-	"github.com/ZeroHawkeye/wordZero/pkg/document"
+	"github.com/nineya/wordZero/pkg/document"
 )
 
 // TestTemplateInheritanceComplete 完整的模板继承测试

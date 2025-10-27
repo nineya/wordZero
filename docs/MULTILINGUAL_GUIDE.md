@@ -183,9 +183,9 @@ title.SetStyle(style.StyleHeading1)
 
 ### Project Links
 
-- **GitHub Repository**: https://github.com/ZeroHawkeye/wordZero
-- **Chinese Wiki**: https://github.com/ZeroHawkeye/wordZero/wiki
-- **English Wiki**: https://github.com/ZeroHawkeye/wordZero/wiki/en-Home
+- **GitHub Repository**: https://github.com/nineya/wordZero
+- **Chinese Wiki**: https://github.com/nineya/wordZero/wiki
+- **English Wiki**: https://github.com/nineya/wordZero/wiki/en-Home
 
 ### Related Documentation
 

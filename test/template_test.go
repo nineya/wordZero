@@ -5,7 +5,7 @@ import (
 	"os"
 	"testing"
 
-	"github.com/ZeroHawkeye/wordZero/pkg/document"
+	"github.com/nineya/wordZero/pkg/document"
 )
 
 // TestTemplateIntegration 模板功能集成测试

@@ -5,8 +5,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/ZeroHawkeye/wordZero/pkg/document"
-	"github.com/ZeroHawkeye/wordZero/pkg/style"
+	"github.com/nineya/wordZero/pkg/document"
+	"github.com/nineya/wordZero/pkg/style"
 )
 
 // TestTemplateStylePreservation 测试模板渲染时样式保持
