@@ -1,4 +1,4 @@
-module github.com/ZeroHawkeye/wordZero
+module github.com/nineya/wordZero
 
 go 1.22
 
