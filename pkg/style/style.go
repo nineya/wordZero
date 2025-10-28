@@ -343,9 +343,8 @@ func (sm *StyleManager) addHeadingStyles() {
 			KeepNext:  &KeepNext{},
 			KeepLines: &KeepLines{},
 			Spacing: &Spacing{
-				Before:   "240", // 12磅段前间距
-				After:    "0",   // 0磅段段后间距
-				LineRule: "auto",
+				Before: "240", // 12磅段前间距
+				After:  "0",   // 0磅段段后间距
 			},
 			OutlineLevel: &OutlineLevel{
 				Val: "0",
@@ -380,9 +379,8 @@ func (sm *StyleManager) addHeadingStyles() {
 			KeepNext:  &KeepNext{},
 			KeepLines: &KeepLines{},
 			Spacing: &Spacing{
-				Before:   "120", // 6磅段前间距
-				After:    "0",   // 0磅段后间距
-				LineRule: "auto",
+				Before: "120", // 6磅段前间距
+				After:  "0",   // 0磅段后间距
 			},
 			OutlineLevel: &OutlineLevel{
 				Val: "1",
@@ -417,9 +415,8 @@ func (sm *StyleManager) addHeadingStyles() {
 			KeepNext:  &KeepNext{},
 			KeepLines: &KeepLines{},
 			Spacing: &Spacing{
-				Before:   "120", // 6磅段前间距
-				After:    "0",   // 0磅段后间距
-				LineRule: "auto",
+				Before: "120", // 6磅段前间距
+				After:  "0",   // 0磅段后间距
 			},
 			OutlineLevel: &OutlineLevel{
 				Val: "2",
@@ -454,9 +451,8 @@ func (sm *StyleManager) addHeadingStyles() {
 			KeepNext:  &KeepNext{},
 			KeepLines: &KeepLines{},
 			Spacing: &Spacing{
-				Before:   "120", // 6磅段前间距
-				After:    "0",   // 0磅段后间距
-				LineRule: "auto",
+				Before: "120", // 6磅段前间距
+				After:  "0",   // 0磅段后间距
 			},
 			OutlineLevel: &OutlineLevel{
 				Val: "3",
@@ -492,9 +488,8 @@ func (sm *StyleManager) addHeadingStyles() {
 			KeepNext:  &KeepNext{},
 			KeepLines: &KeepLines{},
 			Spacing: &Spacing{
-				Before:   "120", // 6磅段前间距
-				After:    "0",   // 0磅段后间距
-				LineRule: "auto",
+				Before: "120", // 6磅段前间距
+				After:  "0",   // 0磅段后间距
 			},
 			OutlineLevel: &OutlineLevel{
 				Val: "4",
@@ -528,9 +523,8 @@ func (sm *StyleManager) addHeadingStyles() {
 			KeepNext:  &KeepNext{},
 			KeepLines: &KeepLines{},
 			Spacing: &Spacing{
-				Before:   "120", // 6磅段前间距
-				After:    "0",   // 0磅段后间距
-				LineRule: "auto",
+				Before: "120", // 6磅段前间距
+				After:  "0",   // 0磅段后间距
 			},
 			OutlineLevel: &OutlineLevel{
 				Val: "5",
@@ -565,9 +559,8 @@ func (sm *StyleManager) addHeadingStyles() {
 			KeepNext:  &KeepNext{},
 			KeepLines: &KeepLines{},
 			Spacing: &Spacing{
-				Before:   "120", // 6磅段前间距
-				After:    "0",   // 0磅段后间距
-				LineRule: "auto",
+				Before: "120", // 6磅段前间距
+				After:  "0",   // 0磅段后间距
 			},
 			OutlineLevel: &OutlineLevel{
 				Val: "6",
@@ -601,9 +594,8 @@ func (sm *StyleManager) addHeadingStyles() {
 			KeepNext:  &KeepNext{},
 			KeepLines: &KeepLines{},
 			Spacing: &Spacing{
-				Before:   "120", // 6磅段前间距
-				After:    "0",   // 0磅段后间距
-				LineRule: "auto",
+				Before: "120", // 6磅段前间距
+				After:  "0",   // 0磅段后间距
 			},
 			OutlineLevel: &OutlineLevel{
 				Val: "7",
@@ -638,9 +630,8 @@ func (sm *StyleManager) addHeadingStyles() {
 			KeepNext:  &KeepNext{},
 			KeepLines: &KeepLines{},
 			Spacing: &Spacing{
-				Before:   "120", // 6磅段前间距
-				After:    "0",   // 0磅段后间距
-				LineRule: "auto",
+				Before: "120", // 6磅段前间距
+				After:  "0",   // 0磅段后间距
 			},
 			OutlineLevel: &OutlineLevel{
 				Val: "8",
@@ -678,9 +669,8 @@ func (sm *StyleManager) addSpecialStyles() {
 				Val: "center", // 居中对齐
 			},
 			Spacing: &Spacing{
-				Before:   "240", // 12磅段前间距
-				After:    "60",  // 3磅段后间距
-				LineRule: "auto",
+				Before: "240", // 12磅段前间距
+				After:  "60",  // 3磅段后间距
 			},
 		},
 		RunPr: &RunProperties{
@@ -719,9 +709,8 @@ func (sm *StyleManager) addSpecialStyles() {
 				Val: "center", // 居中对齐
 			},
 			Spacing: &Spacing{
-				Before:   "0",   // 0磅段前间距
-				After:    "160", // 8磅段后间距
-				LineRule: "auto",
+				Before: "0",   // 0磅段前间距
+				After:  "160", // 8磅段后间距
 			},
 		},
 		RunPr: &RunProperties{
