@@ -426,13 +426,17 @@ func (d *Document) addTOCEntry(entry TOCEntry, config *TOCConfig) error {
 // findTOCStart 查找目录开始位置
 func (d *Document) findTOCStart() int {
 	for i, element := range d.Body.Elements {
-		if paragraph, ok := element.(*Paragraph); ok {
-			if paragraph.Properties != nil && paragraph.Properties.ParagraphStyle != nil {
-				if strings.HasPrefix(paragraph.Properties.ParagraphStyle.Val, "TOC") {
-					return i
-				}
-			}
+		// 自己修改
+		if _, ok := element.(*SDT); ok {
+			return i
 		}
+		//if paragraph, ok := element.(*Paragraph); ok {
+		//	if paragraph.Properties != nil && paragraph.Properties.ParagraphStyle != nil {
+		//		if strings.HasPrefix(paragraph.Properties.ParagraphStyle.Val, "TOC") {
+		//			return i
+		//		}
+		//	}
+		//}
 	}
 	return -1
 }
