@@ -59,6 +59,7 @@ type Next struct {
 // 注意：字段顺序必须符合OpenXML标准
 type ParagraphProperties struct {
 	XMLName         xml.Name         `xml:"w:pPr"`
+	WidowControl    *WidowControl    `xml:"w:widowControl,omitempty"`
 	KeepNext        *KeepNext        `xml:"w:keepNext,omitempty"`
 	KeepLines       *KeepLines       `xml:"w:keepLines,omitempty"`
 	PageBreak       *PageBreak       `xml:"w:pageBreakBefore,omitempty"`
@@ -189,6 +190,11 @@ type Indentation struct {
 	FirstLine string   `xml:"w:firstLine,attr,omitempty"`
 	Left      string   `xml:"w:left,attr,omitempty"`
 	Right     string   `xml:"w:right,attr,omitempty"`
+}
+
+type WidowControl struct {
+	XMLName xml.Name `xml:"w:widowControl"`
+	Val     bool     `xml:"w:val,attr"`
 }
 
 type KeepNext struct {
