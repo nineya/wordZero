@@ -209,10 +209,12 @@ type WordWrap struct {
 
 type AutoSpaceDE struct {
 	XMLName xml.Name `xml:"w:autoSpaceDE"`
+	Val     bool     `xml:"w:val,attr"`
 }
 
 type AutoSpaceDN struct {
 	XMLName xml.Name `xml:"w:autoSpaceDN"`
+	Val     bool     `xml:"w:val,attr"`
 }
 
 type Kinsoku struct {
