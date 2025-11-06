@@ -60,6 +60,11 @@ type Next struct {
 type ParagraphProperties struct {
 	XMLName         xml.Name         `xml:"w:pPr"`
 	WidowControl    *WidowControl    `xml:"w:widowControl,omitempty"`
+	WordWrap        *WordWrap        `xml:"w:wordWrap,omitempty"`
+	AutoSpaceDE     *AutoSpaceDE     `xml:"w:autoSpaceDE,omitempty"`
+	AutoSpaceDN     *AutoSpaceDN     `xml:"w:autoSpaceDN,omitempty"`
+	Kinsoku         *Kinsoku         `xml:"w:kinsoku,omitempty"`
+	OverflowPunct   *OverflowPunct   `xml:"w:overflowPunct,omitempty"`
 	KeepNext        *KeepNext        `xml:"w:keepNext,omitempty"`
 	KeepLines       *KeepLines       `xml:"w:keepLines,omitempty"`
 	PageBreak       *PageBreak       `xml:"w:pageBreakBefore,omitempty"`
@@ -194,6 +199,29 @@ type Indentation struct {
 
 type WidowControl struct {
 	XMLName xml.Name `xml:"w:widowControl"`
+	Val     bool     `xml:"w:val,attr"`
+}
+
+type WordWrap struct {
+	XMLName xml.Name `xml:"w:wordWrap"`
+	Val     bool     `xml:"w:val,attr"`
+}
+
+type AutoSpaceDE struct {
+	XMLName xml.Name `xml:"w:autoSpaceDE"`
+}
+
+type AutoSpaceDN struct {
+	XMLName xml.Name `xml:"w:autoSpaceDN"`
+}
+
+type Kinsoku struct {
+	XMLName xml.Name `xml:"w:kinsoku"`
+	Val     bool     `xml:"w:val,attr"`
+}
+
+type OverflowPunct struct {
+	XMLName xml.Name `xml:"w:overflowPunct"`
 	Val     bool     `xml:"w:val,attr"`
 }
 
