@@ -464,6 +464,19 @@ func (r *WordRenderer) renderTable(node *extast.Table) (ast.WalkStatus, error) {
 	}
 
 	// 添加表格到文档
+	if len(r.doc.Body.Elements) != 0 {
+		// 如果上个元素也是表格，则添加空行，避免两个表格连接在一起
+		if _, ok := r.doc.Body.Elements[len(r.doc.Body.Elements)-1].(*document.Table); ok {
+			r.doc.Body.Elements = append(r.doc.Body.Elements, document.Paragraph{
+				Properties: &document.ParagraphProperties{
+					Spacing: &document.Spacing{
+						Line:     "240",
+						LineRule: "auto",
+					},
+				},
+			})
+		}
+	}
 	table := r.doc.AddTable(config)
 	if table != nil {
 		// 设置表头样式（如果有的话）
