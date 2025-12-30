@@ -2,6 +2,6 @@ module floating_images_demo
 
 go 1.24.10
 
-replace github.com/ZeroHawkeye/wordZero => ../..
+replace github.com/nineya/wordZero => ../..
 
-require github.com/ZeroHawkeye/wordZero v1.4.0
+require github.com/nineya/wordZero v1.4.0

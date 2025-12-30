@@ -5,7 +5,7 @@ import (
 	"log"
 	"os"
 
-	"github.com/ZeroHawkeye/wordZero/pkg/markdown"
+	"github.com/nineya/wordZero/pkg/markdown"
 )
 
 // 数学公式转换示例

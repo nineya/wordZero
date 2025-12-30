@@ -3,7 +3,7 @@ package main
 import (
 	"log"
 
-	"github.com/ZeroHawkeye/wordZero/pkg/document"
+	"github.com/nineya/wordZero/pkg/document"
 )
 
 func main() {
