@@ -440,26 +440,6 @@ func (r *WordRenderer) renderTable(node *extast.Table) (ast.WalkStatus, error) {
 	var alignments []extast.Alignment
 	var emphases [][]int
 
-	// 遍历表头
-	for child := node.FirstChild(); child != nil; child = child.NextSibling() {
-		if row, ok := child.(*extast.TableHeader); ok {
-			var rowData []string
-			var rowEmphasis []int
-			// 遍历表头单元格
-			for cellChild := row.FirstChild(); cellChild != nil; cellChild = cellChild.NextSibling() {
-				if cell, ok := cellChild.(*extast.TableCell); ok {
-					cellText := r.extractTextContent(cell)
-					rowData = append(rowData, cellText)
-					//表头默认粗体
-					rowEmphasis = append(rowEmphasis, 2)
-				}
-			}
-			tableData = append(tableData, rowData)
-			emphases = append(emphases, rowEmphasis)
-			hasHeader = true
-		}
-	}
-
 	// 遍历表格行
 	for child := node.FirstChild(); child != nil; child = child.NextSibling() {
 		if row, ok := child.(*extast.TableRow); ok {
@@ -480,23 +460,22 @@ func (r *WordRenderer) renderTable(node *extast.Table) (ast.WalkStatus, error) {
 				}
 			}
 			tableData = append(tableData, rowData)
+			emphases = append(emphases, rowEmphasis)
 		} else if header, ok := child.(*extast.TableHeader); ok { // 表头
-			hasHeader = true
 			var rowData []string
-			if len(alignments) == 0 {
-				// 从第一行获取对齐方式
-				alignments = header.Alignments
-			}
-
-			// 遍历单元格
+			var rowEmphasis []int
+			// 遍历表头单元格
 			for cellChild := header.FirstChild(); cellChild != nil; cellChild = cellChild.NextSibling() {
 				if cell, ok := cellChild.(*extast.TableCell); ok {
 					cellText := r.extractTextContent(cell)
 					rowData = append(rowData, cellText)
+					//表头默认粗体
+					rowEmphasis = append(rowEmphasis, 2)
 				}
 			}
 			tableData = append(tableData, rowData)
 			emphases = append(emphases, rowEmphasis)
+			hasHeader = true
 		}
 	}
 

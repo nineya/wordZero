@@ -4,7 +4,6 @@ package document
 import (
 	"encoding/xml"
 	"fmt"
-	"strconv"
 	"strings"
 )
 
