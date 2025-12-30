@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"log"
 
-	"github.com/ZeroHawkeye/wordZero/pkg/document"
+	"github.com/nineya/wordZero/pkg/document"
 )
 
 func main() {
@@ -187,7 +187,7 @@ func main() {
 		log.Printf("添加页眉失败: %v", err)
 	}
 
-	err = doc.AddFooterWithPageNumber(document.HeaderFooterTypeDefault, "", true)
+	err = doc.AddFooter(document.HeaderFooterTypeDefault, "", nil)
 	if err != nil {
 		log.Printf("添加页脚失败: %v", err)
 	}

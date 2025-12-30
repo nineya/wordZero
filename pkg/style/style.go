@@ -59,6 +59,12 @@ type Next struct {
 // 注意：字段顺序必须符合OpenXML标准
 type ParagraphProperties struct {
 	XMLName         xml.Name         `xml:"w:pPr"`
+	WidowControl    *WidowControl    `xml:"w:widowControl,omitempty"`
+	WordWrap        *WordWrap        `xml:"w:wordWrap,omitempty"`
+	AutoSpaceDE     *AutoSpaceDE     `xml:"w:autoSpaceDE,omitempty"`
+	AutoSpaceDN     *AutoSpaceDN     `xml:"w:autoSpaceDN,omitempty"`
+	Kinsoku         *Kinsoku         `xml:"w:kinsoku,omitempty"`
+	OverflowPunct   *OverflowPunct   `xml:"w:overflowPunct,omitempty"`
 	KeepNext        *KeepNext        `xml:"w:keepNext,omitempty"`
 	KeepLines       *KeepLines       `xml:"w:keepLines,omitempty"`
 	PageBreak       *PageBreak       `xml:"w:pageBreakBefore,omitempty"`
@@ -189,6 +195,36 @@ type Indentation struct {
 	FirstLine string   `xml:"w:firstLine,attr,omitempty"`
 	Left      string   `xml:"w:left,attr,omitempty"`
 	Right     string   `xml:"w:right,attr,omitempty"`
+}
+
+type WidowControl struct {
+	XMLName xml.Name `xml:"w:widowControl"`
+	Val     bool     `xml:"w:val,attr"`
+}
+
+type WordWrap struct {
+	XMLName xml.Name `xml:"w:wordWrap"`
+	Val     bool     `xml:"w:val,attr"`
+}
+
+type AutoSpaceDE struct {
+	XMLName xml.Name `xml:"w:autoSpaceDE"`
+	Val     bool     `xml:"w:val,attr"`
+}
+
+type AutoSpaceDN struct {
+	XMLName xml.Name `xml:"w:autoSpaceDN"`
+	Val     bool     `xml:"w:val,attr"`
+}
+
+type Kinsoku struct {
+	XMLName xml.Name `xml:"w:kinsoku"`
+	Val     bool     `xml:"w:val,attr"`
+}
+
+type OverflowPunct struct {
+	XMLName xml.Name `xml:"w:overflowPunct"`
+	Val     bool     `xml:"w:val,attr"`
 }
 
 type KeepNext struct {
@@ -799,8 +835,9 @@ func (sm *StyleManager) addSpecialStyles() {
 				Right: "720", // 右缩进0.5英寸
 			},
 			Spacing: &Spacing{
-				Before: "120", // 6磅段前间距
-				After:  "120", // 6磅段后间距
+				Before:   "120", // 6磅段前间距
+				After:    "120", // 6磅段后间距
+				LineRule: "auto",
 			},
 		},
 		RunPr: &RunProperties{
@@ -827,8 +864,9 @@ func (sm *StyleManager) addSpecialStyles() {
 				Left: "360", // 左缩进0.25英寸
 			},
 			Spacing: &Spacing{
-				Before: "60", // 3磅段前间距
-				After:  "60", // 3磅段后间距
+				Before:   "60", // 3磅段前间距
+				After:    "60", // 3磅段后间距
+				LineRule: "auto",
 			},
 			ParagraphBorder: &ParagraphBorder{
 				Top: &ParagraphBorderLine{
@@ -917,7 +955,8 @@ func (sm *StyleManager) addTOCStyles() {
 		},
 		ParagraphPr: &ParagraphProperties{
 			Spacing: &Spacing{
-				After: "100", // 5磅段后间距
+				After:    "100", // 5磅段后间距
+				LineRule: "auto",
 			},
 			Indentation: &Indentation{
 				Left: "0", // 无左缩进
@@ -952,7 +991,8 @@ func (sm *StyleManager) addTOCStyles() {
 		},
 		ParagraphPr: &ParagraphProperties{
 			Spacing: &Spacing{
-				After: "100", // 5磅段后间距
+				After:    "100", // 5磅段后间距
+				LineRule: "auto",
 			},
 			Indentation: &Indentation{
 				Left: "240", // 左缩进240 TWIPs (12磅)
@@ -987,7 +1027,8 @@ func (sm *StyleManager) addTOCStyles() {
 		},
 		ParagraphPr: &ParagraphProperties{
 			Spacing: &Spacing{
-				After: "100", // 5磅段后间距
+				After:    "100", // 5磅段后间距
+				LineRule: "auto",
 			},
 			Indentation: &Indentation{
 				Left: "480", // 左缩进480 TWIPs (24磅)
@@ -1024,7 +1065,8 @@ func (sm *StyleManager) addTOCStyles() {
 			},
 			ParagraphPr: &ParagraphProperties{
 				Spacing: &Spacing{
-					After: "100", // 5磅段后间距
+					After:    "100", // 5磅段后间距
+					LineRule: "auto",
 				},
 				Indentation: &Indentation{
 					Left: fmt.Sprintf("%d", level*240), // 每级增加240 TWIPs (12磅)
@@ -1060,8 +1102,9 @@ func (sm *StyleManager) addTOCStyles() {
 		},
 		ParagraphPr: &ParagraphProperties{
 			Spacing: &Spacing{
-				Before: "240", // 12磅段前间距
-				After:  "120", // 6磅段后间距
+				Before:   "240", // 12磅段前间距
+				After:    "120", // 6磅段后间距
+				LineRule: "auto",
 			},
 			Justification: &Justification{
 				Val: "center", // 居中对齐

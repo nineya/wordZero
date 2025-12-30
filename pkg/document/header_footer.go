@@ -4,6 +4,7 @@ package document
 import (
 	"encoding/xml"
 	"fmt"
+	"strings"
 )
 
 // HeaderFooterType 页眉页脚类型
@@ -174,6 +175,38 @@ func createPageNumberRuns() []Run {
 	}
 }
 
+// createTotalPageNumberRuns 创建页码域总页码代码的Run集合
+func createTotalPageNumberRuns() []Run {
+	return []Run{
+		{
+			FieldChar: &FieldChar{
+				FieldCharType: "begin",
+			},
+		},
+		{
+			InstrText: &InstrText{
+				Space:   "preserve",
+				Content: " NUMPAGES  \\* MERGEFORMAT ",
+			},
+		},
+		{
+			FieldChar: &FieldChar{
+				FieldCharType: "separate",
+			},
+		},
+		{
+			Text: Text{
+				Content: "1",
+			},
+		},
+		{
+			FieldChar: &FieldChar{
+				FieldCharType: "end",
+			},
+		},
+	}
+}
+
 // getFileNameForType 获取页眉页脚文件名
 func getFileNameForType(typePrefix string, headerType HeaderFooterType) string {
 	switch headerType {
@@ -242,19 +275,23 @@ func (d *Document) AddHeader(headerType HeaderFooterType, text string) error {
 }
 
 // AddFooter 添加页脚
-func (d *Document) AddFooter(footerType HeaderFooterType, text string) error {
+func (d *Document) AddFooter(footerType HeaderFooterType, text string, properties *ParagraphProperties) error {
 	footer := createStandardFooter()
 
 	// 创建页脚段落
-	paragraph := &Paragraph{}
-	if text != "" {
-		run := Run{
-			Text: Text{
-				Content: text,
-				Space:   "preserve",
-			},
+	paragraph := &Paragraph{Properties: properties}
+	textPages := strings.Split(text, "$PAGE")
+	for i, page := range textPages {
+		textTotalPages := strings.Split(page, "$TOTAL")
+		for j, total := range textTotalPages {
+			paragraph.Runs = append(paragraph.Runs, Run{Text: Text{Content: total, Space: "preserve"}})
+			if j < len(textTotalPages)-1 {
+				paragraph.Runs = append(paragraph.Runs, createTotalPageNumberRuns()...)
+			}
 		}
-		paragraph.Runs = append(paragraph.Runs, run)
+		if i < len(textPages)-1 {
+			paragraph.Runs = append(paragraph.Runs, createPageNumberRuns()...)
+		}
 	}
 	footer.Paragraphs = append(footer.Paragraphs, paragraph)
 
@@ -369,85 +406,6 @@ func (d *Document) AddHeaderWithPageNumber(headerType HeaderFooterType, text str
 
 	// 更新节属性
 	d.addHeaderReference(headerType, headerID)
-
-	return nil
-}
-
-// AddFooterWithPageNumber 添加带页码的页脚
-func (d *Document) AddFooterWithPageNumber(footerType HeaderFooterType, text string, showPageNum bool) error {
-	footer := createStandardFooter()
-
-	// 创建页脚段落
-	paragraph := &Paragraph{}
-
-	if text != "" {
-		run := Run{
-			Text: Text{
-				Content: text,
-				Space:   "preserve",
-			},
-		}
-		paragraph.Runs = append(paragraph.Runs, run)
-	}
-
-	if showPageNum {
-		// 添加"第"字
-		pageNumRun := Run{
-			Text: Text{
-				Content: " 第 ",
-				Space:   "preserve",
-			},
-		}
-		paragraph.Runs = append(paragraph.Runs, pageNumRun)
-
-		// 添加页码域代码
-		pageNumberRuns := createPageNumberRuns()
-		paragraph.Runs = append(paragraph.Runs, pageNumberRuns...)
-
-		// 添加"页"字
-		pageNumRun2 := Run{
-			Text: Text{
-				Content: " 页",
-				Space:   "preserve",
-			},
-		}
-		paragraph.Runs = append(paragraph.Runs, pageNumRun2)
-	}
-
-	footer.Paragraphs = append(footer.Paragraphs, paragraph)
-
-	// 生成关系ID
-	footerID := fmt.Sprintf("rId%d", len(d.documentRelationships.Relationships)+2) // +2因为rId1保留给styles
-
-	// 序列化页脚
-	footerXML, err := xml.MarshalIndent(footer, "", "  ")
-	if err != nil {
-		return fmt.Errorf("序列化页脚失败: %v", err)
-	}
-
-	// 添加XML声明
-	fullXML := append([]byte(xml.Header), footerXML...)
-
-	// 获取文件名
-	fileName := getFileNameForType("footer", footerType)
-	footerPartName := fmt.Sprintf("word/%s", fileName)
-
-	// 存储页脚内容
-	d.parts[footerPartName] = fullXML
-
-	// 添加关系到文档关系
-	relationship := Relationship{
-		ID:     footerID,
-		Type:   "http://schemas.openxmlformats.org/officeDocument/2006/relationships/footer",
-		Target: fileName,
-	}
-	d.documentRelationships.Relationships = append(d.documentRelationships.Relationships, relationship)
-
-	// 添加内容类型
-	d.addContentType(footerPartName, "application/vnd.openxmlformats-officedocument.wordprocessingml.footer+xml")
-
-	// 更新节属性
-	d.addFooterReference(footerType, footerID)
 
 	return nil
 }

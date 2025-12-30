@@ -5,8 +5,8 @@ import (
 	"fmt"
 	"log"
 
-	"github.com/ZeroHawkeye/wordZero/pkg/document"
-	"github.com/ZeroHawkeye/wordZero/pkg/style"
+	"github.com/nineya/wordZero/pkg/document"
+	"github.com/nineya/wordZero/pkg/style"
 )
 
 func main() {

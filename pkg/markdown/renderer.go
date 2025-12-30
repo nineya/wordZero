@@ -5,7 +5,7 @@ import (
 	"regexp"
 	"strings"
 
-	"github.com/ZeroHawkeye/wordZero/pkg/document"
+	"github.com/nineya/wordZero/pkg/document"
 	"github.com/yuin/goldmark/ast"
 
 	// 添加goldmark扩展的AST节点支持
@@ -77,6 +77,10 @@ func (r *WordRenderer) Render(doc ast.Node) error {
 				return r.renderTable(n)
 			}
 			return ast.WalkContinue, nil
+
+		case *extast.TableHeader:
+			// TableHeader节点由Table处理
+			return ast.WalkSkipChildren, nil
 
 		case *extast.TableRow:
 			// TableRow节点由Table处理
@@ -398,6 +402,7 @@ func (r *WordRenderer) cleanText(text string) string {
 // renderTable 渲染表格
 func (r *WordRenderer) renderTable(node *extast.Table) (ast.WalkStatus, error) {
 	// 收集表格数据
+	var hasHeader bool
 	var tableData [][]string
 	var alignments []extast.Alignment
 
@@ -418,11 +423,27 @@ func (r *WordRenderer) renderTable(node *extast.Table) (ast.WalkStatus, error) {
 				}
 			}
 			tableData = append(tableData, rowData)
+		} else if header, ok := child.(*extast.TableHeader); ok { // 表头
+			hasHeader = true
+			var rowData []string
+			if len(alignments) == 0 {
+				// 从第一行获取对齐方式
+				alignments = header.Alignments
+			}
+
+			// 遍历单元格
+			for cellChild := header.FirstChild(); cellChild != nil; cellChild = cellChild.NextSibling() {
+				if cell, ok := cellChild.(*extast.TableCell); ok {
+					cellText := r.extractTextContent(cell)
+					rowData = append(rowData, cellText)
+				}
+			}
+			tableData = append(tableData, rowData)
 		}
 	}
 
 	// 如果没有数据，跳过
-	if len(tableData) == 0 {
+	if len(tableData) == 0 || (hasHeader && len(tableData) == 1) {
 		return ast.WalkSkipChildren, nil
 	}
 
@@ -443,10 +464,23 @@ func (r *WordRenderer) renderTable(node *extast.Table) (ast.WalkStatus, error) {
 	}
 
 	// 添加表格到文档
+	if len(r.doc.Body.Elements) != 0 {
+		// 如果上个元素也是表格，则添加空行，避免两个表格连接在一起
+		if _, ok := r.doc.Body.Elements[len(r.doc.Body.Elements)-1].(*document.Table); ok {
+			r.doc.Body.Elements = append(r.doc.Body.Elements, document.Paragraph{
+				Properties: &document.ParagraphProperties{
+					Spacing: &document.Spacing{
+						Line:     "240",
+						LineRule: "auto",
+					},
+				},
+			})
+		}
+	}
 	table := r.doc.AddTable(config)
 	if table != nil {
 		// 设置表头样式（如果有的话）
-		if len(tableData) > 0 {
+		if hasHeader {
 			// 第一行设为表头样式
 			err := table.SetRowAsHeader(0, true)
 			if err != nil && r.opts.ErrorCallback != nil {

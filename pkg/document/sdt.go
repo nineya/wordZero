@@ -173,6 +173,38 @@ func (sdt *SDT) AddTOCEntry(text string, level int, pageNum int, entryID string)
 	// 确定目录样式ID (13=toc 1, 14=toc 2, 15=toc 3等)
 	styleVal := fmt.Sprintf("%d", 12+level)
 
+	// TODO 测试发现不需要
+	//// 创建内嵌的SDT用于占位符文本
+	//placeholderSDT := &SDT{
+	//	Properties: &SDTProperties{
+	//		RunPr: &RunProperties{
+	//			FontFamily: &FontFamily{ASCII: "Calibri"},
+	//			FontSize:   &FontSize{Val: "22"},
+	//		},
+	//		ID: &SDTID{Val: entryID},
+	//		Placeholder: &SDTPlaceholder{
+	//			DocPart: &DocPart{Val: generatePlaceholderGUID(level)},
+	//		},
+	//		Color: &SDTColor{Val: "509DF3"},
+	//	},
+	//	EndPr: &SDTEndPr{
+	//		RunPr: &RunProperties{
+	//			FontFamily: &FontFamily{ASCII: "Calibri"},
+	//			FontSize:   &FontSize{Val: "22"},
+	//		},
+	//	},
+	//	Content: &SDTContent{
+	//		Elements: []interface{}{
+	//			Run{
+	//				Text: Text{Content: text},
+	//			},
+	//		},
+	//	},
+	//}
+	//
+	//// 将占位符SDT添加到段落中
+	//sdt.Content.Elements = append(sdt.Content.Elements, placeholderSDT)
+
 	// 创建目录条目段落
 	entryPara := &Paragraph{
 		Properties: &ParagraphProperties{
@@ -187,50 +219,32 @@ func (sdt *SDT) AddTOCEntry(text string, level int, pageNum int, entryID string)
 				},
 			},
 		},
-		Runs: []Run{},
-	}
-
-	// 创建内嵌的SDT用于占位符文本
-	placeholderSDT := &SDT{
-		Properties: &SDTProperties{
-			RunPr: &RunProperties{
-				FontFamily: &FontFamily{ASCII: "Calibri"},
-				FontSize:   &FontSize{Val: "22"},
+		// TODO 自己修改修复
+		//Runs: []Run{},
+		Runs: []Run{
+			Run{FieldChar: &FieldChar{FieldCharType: "begin"}},
+			Run{
+				InstrText: &InstrText{Space: "preserve", Content: fmt.Sprintf(" HYPERLINK \\l %s ", entryID)},
 			},
-			ID: &SDTID{Val: entryID},
-			Placeholder: &SDTPlaceholder{
-				DocPart: &DocPart{Val: generatePlaceholderGUID(level)},
+			Run{FieldChar: &FieldChar{FieldCharType: "separate"}},
+			Run{
+				Text: Text{Content: text},
 			},
-			Color: &SDTColor{Val: "509DF3"},
-		},
-		EndPr: &SDTEndPr{
-			RunPr: &RunProperties{
-				FontFamily: &FontFamily{ASCII: "Calibri"},
-				FontSize:   &FontSize{Val: "22"},
+			Run{
+				Tab: &TabDef{},
 			},
-		},
-		Content: &SDTContent{
-			Elements: []interface{}{
-				Run{
-					Text: Text{Content: text},
-				},
+			Run{FieldChar: &FieldChar{FieldCharType: "begin"}},
+			Run{
+				InstrText: &InstrText{Space: "preserve", Content: fmt.Sprintf(" PAGEREF %s \\h ", entryID)},
 			},
+			Run{FieldChar: &FieldChar{FieldCharType: "separate"}},
+			Run{
+				Text: Text{Content: fmt.Sprintf("%d", pageNum)},
+			},
+			Run{FieldChar: &FieldChar{FieldCharType: "end"}},
+			Run{FieldChar: &FieldChar{FieldCharType: "end"}},
 		},
 	}
-
-	// 将占位符SDT添加到段落中
-	sdt.Content.Elements = append(sdt.Content.Elements, placeholderSDT)
-
-	// 创建包含制表符和页码的文本Run
-	tabRun := Run{
-		Text: Text{Content: "\t"},
-	}
-
-	pageRun := Run{
-		Text: Text{Content: fmt.Sprintf("%d", pageNum)},
-	}
-
-	entryPara.Runs = append(entryPara.Runs, tabRun, pageRun)
 
 	// 添加段落到SDT内容中
 	sdt.Content.Elements = append(sdt.Content.Elements, entryPara)
