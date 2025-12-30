@@ -33,6 +33,9 @@ var (
 	ErrInvalidBlockDefinition = NewDocumentError("invalid_block_definition", fmt.Errorf("invalid block definition"), "")
 )
 
+// 预编译正则表达式用于页眉页脚变量替换
+var headerFooterVarPattern = regexp.MustCompile(`\{\{(\w+)\}\}`)
+
 // TemplateEngine 模板引擎
 type TemplateEngine struct {
 	cache    map[string]*Template // 模板缓存
@@ -478,41 +481,127 @@ func (te *TemplateEngine) renderConditionals(content string, conditions map[stri
 
 // renderLoops 渲染循环语句
 func (te *TemplateEngine) renderLoops(content string, lists map[string][]interface{}) string {
-	eachPattern := regexp.MustCompile(`(?s)\{\{#each\s+(\w+)\}\}(.*?)\{\{/each\}\}`)
+	// 使用栈式方法正确处理嵌套循环
+	return te.renderLoopsNested(content, lists, 0)
+}
 
-	return eachPattern.ReplaceAllStringFunc(content, func(match string) string {
-		matches := eachPattern.FindStringSubmatch(match)
-		if len(matches) >= 3 {
-			listVar := matches[1]
-			blockContent := matches[2]
+// renderLoopsNested 使用递归方式处理嵌套循环
+func (te *TemplateEngine) renderLoopsNested(content string, lists map[string][]interface{}, depth int) string {
+	// 查找第一个 {{#each}} 标记
+	eachStartPattern := regexp.MustCompile(`\{\{#each\s+(\w+)\}\}`)
+	startMatch := eachStartPattern.FindStringIndex(content)
 
-			if listData, exists := lists[listVar]; exists {
-				var result strings.Builder
-				for i, item := range listData {
-					// 创建循环上下文变量
-					loopContent := strings.ReplaceAll(blockContent, "{{this}}", te.interfaceToString(item))
-					loopContent = strings.ReplaceAll(loopContent, "{{@index}}", strconv.Itoa(i))
-					loopContent = strings.ReplaceAll(loopContent, "{{@first}}", strconv.FormatBool(i == 0))
-					loopContent = strings.ReplaceAll(loopContent, "{{@last}}", strconv.FormatBool(i == len(listData)-1))
+	if startMatch == nil {
+		// 没有找到循环，直接返回
+		return content
+	}
 
-					// 如果item是map，处理属性访问
-					if itemMap, ok := item.(map[string]interface{}); ok {
-						for key, value := range itemMap {
-							placeholder := fmt.Sprintf("{{%s}}", key)
-							loopContent = strings.ReplaceAll(loopContent, placeholder, te.interfaceToString(value))
-						}
+	// 找到了循环开始标记，现在需要找到匹配的结束标记
+	startPos := startMatch[0]
+	listVarMatch := eachStartPattern.FindStringSubmatch(content[startPos:])
+	if len(listVarMatch) < 2 {
+		return content
+	}
 
-						// 处理循环内部的条件语句
-						loopContent = te.renderLoopConditionals(loopContent, itemMap)
-					}
+	listVar := listVarMatch[1]
+	blockStart := startMatch[1] // {{#each xxx}} 之后的位置
 
-					result.WriteString(loopContent)
-				}
-				return result.String()
-			}
+	// 使用栈来找到匹配的 {{/each}}
+	depth_counter := 1
+	pos := blockStart
+	blockEnd := -1
+
+	for pos < len(content) {
+		// 查找下一个 {{#each}} 或 {{/each}}
+		nextEach := eachStartPattern.FindStringIndex(content[pos:])
+		endPattern := regexp.MustCompile(`\{\{/each\}\}`)
+		nextEnd := endPattern.FindStringIndex(content[pos:])
+
+		if nextEnd == nil {
+			// 没有找到结束标记，语法错误
+			break
 		}
-		return match // 保持原样
-	})
+
+		// 确定下一个是开始还是结束
+		if nextEach != nil && nextEach[0] < nextEnd[0] {
+			// 下一个是嵌套的开始标记
+			depth_counter++
+			pos = pos + nextEach[1]
+		} else {
+			// 下一个是结束标记
+			depth_counter--
+			if depth_counter == 0 {
+				// 找到了匹配的结束标记
+				blockEnd = pos + nextEnd[0]
+				break
+			}
+			pos = pos + nextEnd[1]
+		}
+	}
+
+	if blockEnd == -1 {
+		// 没有找到匹配的结束标记
+		return content
+	}
+
+	// 提取循环块内容
+	blockContent := content[blockStart:blockEnd]
+
+	// 处理循环
+	var result strings.Builder
+
+	// 添加循环之前的内容
+	result.WriteString(content[:startPos])
+
+	// 渲染循环
+	if listData, exists := lists[listVar]; exists {
+		for i, item := range listData {
+			// 创建循环上下文变量
+			loopContent := strings.ReplaceAll(blockContent, "{{this}}", te.interfaceToString(item))
+			loopContent = strings.ReplaceAll(loopContent, "{{@index}}", strconv.Itoa(i))
+			loopContent = strings.ReplaceAll(loopContent, "{{@first}}", strconv.FormatBool(i == 0))
+			loopContent = strings.ReplaceAll(loopContent, "{{@last}}", strconv.FormatBool(i == len(listData)-1))
+
+			// 如果item是map，处理属性访问
+			if itemMap, ok := item.(map[string]interface{}); ok {
+				// 首先处理嵌套的循环（在替换变量之前）
+				// 为嵌套循环创建新的lists map，包含当前项的列表数据
+				nestedLists := make(map[string][]interface{})
+				for key, value := range itemMap {
+					// 检查值是否是列表类型
+					if listValue, ok := value.([]interface{}); ok {
+						nestedLists[key] = listValue
+					}
+				}
+
+				// 如果有嵌套列表，递归处理嵌套循环
+				if len(nestedLists) > 0 {
+					loopContent = te.renderLoopsNested(loopContent, nestedLists, depth+1)
+				}
+
+				// 然后替换普通变量
+				for key, value := range itemMap {
+					placeholder := fmt.Sprintf("{{%s}}", key)
+					// 只替换非列表类型的值
+					if _, isList := value.([]interface{}); !isList {
+						loopContent = strings.ReplaceAll(loopContent, placeholder, te.interfaceToString(value))
+					}
+				}
+
+				// 处理循环内部的条件语句
+				loopContent = te.renderLoopConditionals(loopContent, itemMap)
+			}
+
+			result.WriteString(loopContent)
+		}
+	}
+
+	// 添加循环之后的内容，并递归处理剩余内容中的其他循环
+	remainingContent := content[blockEnd+len("{{/each}}"):]
+	remainingContent = te.renderLoopsNested(remainingContent, lists, depth)
+	result.WriteString(remainingContent)
+
+	return result.String()
 }
 
 // renderLoopConditionals 渲染循环内部的条件语句（支持if-else语法）
@@ -701,7 +790,47 @@ func (te *TemplateEngine) extractTemplateContentFromDocument(doc *Document) (str
 		}
 	}
 
+	// 提取页眉页脚中的模板内容
+	te.extractHeaderFooterContent(doc, &contentBuilder)
+
 	return contentBuilder.String(), nil
+}
+
+// extractHeaderFooterContent 从页眉页脚中提取模板内容
+func (te *TemplateEngine) extractHeaderFooterContent(doc *Document, contentBuilder *strings.Builder) {
+	if doc.parts == nil {
+		return
+	}
+
+	// 遍历所有部件，查找页眉页脚文件
+	for partName, partData := range doc.parts {
+		if strings.HasPrefix(partName, "word/header") || strings.HasPrefix(partName, "word/footer") {
+			// 解析页眉/页脚XML并提取文本
+			text := te.extractTextFromHeaderFooterXML(partData)
+			if text != "" {
+				contentBuilder.WriteString(text)
+				contentBuilder.WriteString("\n")
+			}
+		}
+	}
+}
+
+// extractTextFromHeaderFooterXML 从页眉/页脚XML中提取文本内容
+func (te *TemplateEngine) extractTextFromHeaderFooterXML(xmlData []byte) string {
+	var contentBuilder strings.Builder
+
+	// 使用正则表达式提取<w:t>标签中的文本内容
+	// 这是一个简化的解析方法，适用于提取模板变量
+	textPattern := regexp.MustCompile(`<w:t[^>]*>([^<]*)</w:t>`)
+	matches := textPattern.FindAllSubmatch(xmlData, -1)
+
+	for _, match := range matches {
+		if len(match) >= 2 {
+			contentBuilder.Write(match[1])
+		}
+	}
+
+	return contentBuilder.String()
 }
 
 // cloneDocument 深度复制文档所有元素和属性
@@ -720,6 +849,10 @@ func (te *TemplateEngine) cloneDocument(source *Document) *Document {
 			clonedTable := te.cloneTable(elem)
 			doc.Body.Elements = append(doc.Body.Elements, clonedTable)
 
+		case *SectionProperties:
+			clonedSectPr := te.cloneSectionProperties(elem)
+			doc.Body.Elements = append(doc.Body.Elements, clonedSectPr)
+
 		default:
 			// 其他类型暂时直接复制引用
 			doc.Body.Elements = append(doc.Body.Elements, element)
@@ -733,15 +866,160 @@ func (te *TemplateEngine) cloneDocument(source *Document) *Document {
 		// 如需统一行距，请在模板中显式设置，而非由代码层面硬编码。
 	}
 
-	// 复制 styles.xml 等样式相关部件，确保 docDefaults 等信息完整保留
+	// 复制所有文档部件，确保完整保留原文档结构
 	if doc.parts == nil {
 		doc.parts = make(map[string][]byte)
 	}
-	if data, ok := source.parts["word/styles.xml"]; ok {
-		doc.parts["word/styles.xml"] = data
+	te.cloneAllDocumentParts(source, doc)
+
+	// 复制文档关系（包含页眉页脚引用）
+	if source.documentRelationships != nil {
+		doc.documentRelationships = &Relationships{
+			Xmlns:         source.documentRelationships.Xmlns,
+			Relationships: make([]Relationship, len(source.documentRelationships.Relationships)),
+		}
+		copy(doc.documentRelationships.Relationships, source.documentRelationships.Relationships)
 	}
 
+	// 复制内容类型
+	if source.contentTypes != nil {
+		doc.contentTypes = &ContentTypes{
+			Xmlns:     source.contentTypes.Xmlns,
+			Defaults:  make([]Default, len(source.contentTypes.Defaults)),
+			Overrides: make([]Override, len(source.contentTypes.Overrides)),
+		}
+		copy(doc.contentTypes.Defaults, source.contentTypes.Defaults)
+		copy(doc.contentTypes.Overrides, source.contentTypes.Overrides)
+	}
+
+	// 复制图片ID计数器
+	doc.nextImageID = source.nextImageID
+
 	return doc
+}
+
+// cloneAllDocumentParts 复制所有文档部件，确保完整保留原文档结构
+func (te *TemplateEngine) cloneAllDocumentParts(source, dest *Document) {
+	if source.parts == nil {
+		return
+	}
+
+	for partName, partData := range source.parts {
+		// 跳过 word/document.xml 因为它会在保存时重新生成
+		if partName == "word/document.xml" {
+			continue
+		}
+
+		// 复制部件数据
+		dest.parts[partName] = make([]byte, len(partData))
+		copy(dest.parts[partName], partData)
+	}
+}
+
+// cloneSectionProperties 深度复制节属性
+func (te *TemplateEngine) cloneSectionProperties(source *SectionProperties) *SectionProperties {
+	if source == nil {
+		return nil
+	}
+
+	sectPr := &SectionProperties{
+		XmlnsR: source.XmlnsR,
+	}
+
+	// 复制页面尺寸
+	if source.PageSize != nil {
+		sectPr.PageSize = &PageSizeXML{
+			W:      source.PageSize.W,
+			H:      source.PageSize.H,
+			Orient: source.PageSize.Orient,
+		}
+	}
+
+	// 复制页面边距
+	if source.PageMargins != nil {
+		sectPr.PageMargins = &PageMargin{
+			Top:    source.PageMargins.Top,
+			Right:  source.PageMargins.Right,
+			Bottom: source.PageMargins.Bottom,
+			Left:   source.PageMargins.Left,
+			Header: source.PageMargins.Header,
+			Footer: source.PageMargins.Footer,
+			Gutter: source.PageMargins.Gutter,
+		}
+	}
+
+	// 复制分栏设置
+	if source.Columns != nil {
+		sectPr.Columns = &Columns{
+			Space: source.Columns.Space,
+			Num:   source.Columns.Num,
+		}
+	}
+
+	// 复制页眉引用
+	if source.HeaderReferences != nil {
+		sectPr.HeaderReferences = make([]*HeaderFooterReference, len(source.HeaderReferences))
+		for i, ref := range source.HeaderReferences {
+			sectPr.HeaderReferences[i] = &HeaderFooterReference{
+				Type: ref.Type,
+				ID:   ref.ID,
+			}
+		}
+	}
+
+	// 复制页脚引用
+	if source.FooterReferences != nil {
+		sectPr.FooterReferences = make([]*FooterReference, len(source.FooterReferences))
+		for i, ref := range source.FooterReferences {
+			sectPr.FooterReferences[i] = &FooterReference{
+				Type: ref.Type,
+				ID:   ref.ID,
+			}
+		}
+	}
+
+	// 复制首页不同设置
+	if source.TitlePage != nil {
+		sectPr.TitlePage = &TitlePage{}
+	}
+
+	// 复制页码类型
+	if source.PageNumType != nil {
+		sectPr.PageNumType = &PageNumType{
+			Fmt: source.PageNumType.Fmt,
+		}
+	}
+
+	// 复制文档网格
+	if source.DocGrid != nil {
+		sectPr.DocGrid = &DocGrid{
+			Type:      source.DocGrid.Type,
+			LinePitch: source.DocGrid.LinePitch,
+			CharSpace: source.DocGrid.CharSpace,
+		}
+	}
+
+	return sectPr
+}
+
+// cloneHeaderFooterParts 复制页眉页脚部件 (保留以兼容旧代码，现在由cloneAllDocumentParts处理)
+func (te *TemplateEngine) cloneHeaderFooterParts(source, dest *Document) {
+	if source.parts == nil {
+		return
+	}
+
+	for partName, partData := range source.parts {
+		// 复制页眉文件
+		if strings.HasPrefix(partName, "word/header") {
+			dest.parts[partName] = make([]byte, len(partData))
+			copy(dest.parts[partName], partData)
+		}
+		// 复制页脚文件
+		if strings.HasPrefix(partName, "word/footer") {
+			dest.parts[partName] = make([]byte, len(partData))
+			copy(dest.parts[partName], partData)
+		}
+	}
 }
 
 // cloneParagraph 深度复制段落
@@ -1343,10 +1621,16 @@ func (te *TemplateEngine) cloneTableCell(source *TableCell) TableCell {
 	newCell := TableCell{
 		Properties: te.cloneTableCellProperties(source.Properties),
 		Paragraphs: make([]Paragraph, len(source.Paragraphs)),
+		Tables:     make([]Table, len(source.Tables)), // 复制嵌套表格
 	}
 
 	for i, para := range source.Paragraphs {
 		newCell.Paragraphs[i] = *te.cloneParagraph(&para)
+	}
+
+	// 深度复制嵌套表格
+	for i, table := range source.Tables {
+		newCell.Tables[i] = *te.cloneTable(&table)
 	}
 
 	return newCell
@@ -1539,6 +1823,12 @@ func (te *TemplateEngine) replaceVariablesInDocument(doc *Document, data *Templa
 		}
 	}
 
+	// 处理页眉页脚中的变量替换
+	err = te.replaceVariablesInHeadersFooters(doc, data)
+	if err != nil {
+		return err
+	}
+
 	// 处理图片占位符
 	err = te.processImagePlaceholders(doc, data)
 	if err != nil {
@@ -1546,6 +1836,68 @@ func (te *TemplateEngine) replaceVariablesInDocument(doc *Document, data *Templa
 	}
 
 	return nil
+}
+
+// replaceVariablesInHeadersFooters 在页眉页脚中替换变量
+func (te *TemplateEngine) replaceVariablesInHeadersFooters(doc *Document, data *TemplateData) error {
+	if doc.parts == nil {
+		return nil
+	}
+
+	for partName, partData := range doc.parts {
+		// 处理页眉文件
+		if strings.HasPrefix(partName, "word/header") && strings.HasSuffix(partName, ".xml") {
+			newData, err := te.replaceVariablesInXMLPart(partData, data)
+			if err != nil {
+				return fmt.Errorf("处理页眉变量替换失败 %s: %v", partName, err)
+			}
+			doc.parts[partName] = newData
+		}
+		// 处理页脚文件
+		if strings.HasPrefix(partName, "word/footer") && strings.HasSuffix(partName, ".xml") {
+			newData, err := te.replaceVariablesInXMLPart(partData, data)
+			if err != nil {
+				return fmt.Errorf("处理页脚变量替换失败 %s: %v", partName, err)
+			}
+			doc.parts[partName] = newData
+		}
+	}
+
+	return nil
+}
+
+// replaceVariablesInXMLPart 在XML部件中替换变量
+func (te *TemplateEngine) replaceVariablesInXMLPart(xmlData []byte, data *TemplateData) ([]byte, error) {
+	content := string(xmlData)
+
+	// 替换变量: {{变量名}} - 使用预编译的正则表达式
+	content = headerFooterVarPattern.ReplaceAllStringFunc(content, func(match string) string {
+		matches := headerFooterVarPattern.FindStringSubmatch(match)
+		if len(matches) < 2 {
+			return match
+		}
+		varName := matches[1]
+		if value, exists := data.Variables[varName]; exists {
+			// 对XML内容进行转义
+			return te.escapeXMLContent(te.interfaceToString(value))
+		}
+		return match // 保持原样
+	})
+
+	// 替换条件语句
+	content = te.renderConditionals(content, data.Conditions)
+
+	return []byte(content), nil
+}
+
+// escapeXMLContent 转义XML特殊字符
+func (te *TemplateEngine) escapeXMLContent(s string) string {
+	s = strings.ReplaceAll(s, "&", "&amp;")
+	s = strings.ReplaceAll(s, "<", "&lt;")
+	s = strings.ReplaceAll(s, ">", "&gt;")
+	s = strings.ReplaceAll(s, "\"", "&quot;")
+	s = strings.ReplaceAll(s, "'", "&apos;")
+	return s
 }
 
 // processDocumentLevelLoops 处理文档级别的循环（跨段落）
@@ -1990,6 +2342,13 @@ func (te *TemplateEngine) replaceVariablesInTable(table *Table, data *TemplateDa
 					return err
 				}
 			}
+			// 递归处理嵌套表格
+			for k := range table.Rows[i].Cells[j].Tables {
+				err := te.replaceVariablesInTable(&table.Rows[i].Cells[j].Tables[k], data)
+				if err != nil {
+					return err
+				}
+			}
 		}
 	}
 
@@ -2180,6 +2539,21 @@ func (te *TemplateEngine) renderTableTemplate(table *Table, data *TemplateData) 
 						}
 
 						newRow.Cells[i].Paragraphs[j].Runs = []Run{newRun}
+					}
+				}
+
+				// 处理嵌套表格中的变量替换
+				for k := range newRow.Cells[i].Tables {
+					// 创建模板数据，用于嵌套表格的变量替换
+					nestedData := NewTemplateData()
+					nestedData.Variables = make(map[string]interface{})
+					for key, value := range itemMap {
+						nestedData.Variables[key] = value
+					}
+					// 递归处理嵌套表格
+					err := te.replaceVariablesInTable(&newRow.Cells[i].Tables[k], nestedData)
+					if err != nil {
+						Debugf("处理嵌套表格变量替换时出错: %v", err)
 					}
 				}
 			}

@@ -46,6 +46,38 @@
 - [`AddFormattedParagraph(text string, format *TextFormat)`](document.go#L459) - 添加格式化段落
 - [`AddHeadingParagraph(text string, level int)`](document.go#L682) - 添加标题段落
 - [`AddHeadingParagraphWithBookmark(text string, level int, bookmarkName string)`](document.go#L747) - 添加带书签的标题段落 ✨ **新增功能**
+- [`AddPageBreak()`](document.go#L1185) - 添加分页符
+
+#### 分页符功能 ✨
+
+WordZero提供多种方式添加分页符（页面分页符）：
+
+**方法一：文档级分页符**
+```go
+doc := document.New()
+doc.AddParagraph("第一页内容")
+doc.AddPageBreak()  // 添加分页符
+doc.AddParagraph("第二页内容")
+```
+
+**方法二：段落内分页符**
+```go
+para := doc.AddParagraph("第一页内容")
+para.AddPageBreak()  // 在段落内添加分页符
+para.AddFormattedText("第二页内容", nil)
+```
+
+**方法三：段前分页**
+```go
+para := doc.AddParagraph("第二章标题")
+para.SetPageBreakBefore(true)  // 设置段落前自动分页
+```
+
+**分页功能特性**：
+- **独立分页符**: `Document.AddPageBreak()` 创建独立的分页段落
+- **段落内分页**: `Paragraph.AddPageBreak()` 在当前段落内添加分页符
+- **段前分页**: `Paragraph.SetPageBreakBefore(true)` 设置段落前自动分页
+- **表格分页控制**: 支持表格的分页控制设置
 
 #### 标题段落书签功能 ✨
 `AddHeadingParagraphWithBookmark` 方法现在支持为标题段落添加书签：
@@ -152,6 +184,11 @@
 **日志记录**: ✨ **新增功能** 完善的日志系统，支持模板加载、渲染和分析过程的详细记录
 **数据验证**: ✨ **新增功能** 自动验证模板数据的完整性和格式正确性
 **DOCX模板支持**: ✨ **新增功能** 直接从现有DOCX文件加载模板
+**页眉页脚模板支持**: ✨ **新增功能** 完整支持页眉页脚中的模板变量
+  - **变量识别**: 自动识别页眉页脚中的 `{{变量名}}` 语法
+  - **变量替换**: 渲染时自动替换页眉页脚中的模板变量
+  - **条件语句**: 支持页眉页脚中的条件渲染
+  - **模板分析**: `AnalyzeTemplate` 会自动分析页眉页脚中的变量
 
 ### 模板数据操作
 - [`NewTemplateData()`](template.go) - 创建新的模板数据
@@ -344,9 +381,72 @@ func demonstrateTemplateInheritance() {
 - [`SetAlignment(alignment AlignmentType)`](document.go) - 设置段落对齐方式
 - [`SetSpacing(config *SpacingConfig)`](document.go) - 设置段落间距
 - [`SetStyle(styleID string)`](document.go) - 设置段落样式
+- [`SetIndentation(firstLineCm, leftCm, rightCm float64)`](document.go) - 设置段落缩进 ✨ **已完善**
+- [`SetKeepWithNext(keep bool)`](document.go) - 设置与下一段落保持在同一页 ✨ **新增**
+- [`SetKeepLines(keep bool)`](document.go) - 设置段落所有行保持在同一页 ✨ **新增**
+- [`SetPageBreakBefore(pageBreak bool)`](document.go) - 设置段前分页 ✨ **新增**
+- [`SetWidowControl(control bool)`](document.go) - 设置孤行控制 ✨ **新增**
+- [`SetOutlineLevel(level int)`](document.go) - 设置大纲级别 ✨ **新增**
+- [`SetParagraphFormat(config *ParagraphFormatConfig)`](document.go) - 一次性设置所有段落格式属性 ✨ **新增**
+
+#### 段落格式高级功能 ✨ **新增功能**
+
+WordZero现在支持完整的段落格式自定义功能，提供与Microsoft Word相同的高级段落控制选项。
+
+**分页控制功能**：
+- **SetKeepWithNext** - 确保段落与下一段落保持在同一页，避免标题单独出现在页面底部
+- **SetKeepLines** - 防止段落被分页拆分，保持段落完整性
+- **SetPageBreakBefore** - 在段落前强制插入分页符，常用于章节开始
+
+**孤行控制**：
+- **SetWidowControl** - 防止段落第一行或最后一行单独出现在页面顶部或底部，提升排版质量
+
+**大纲级别**：
+- **SetOutlineLevel** - 设置段落的大纲级别（0-8），用于文档导航窗格显示和目录生成
+
+**综合格式设置**：
+- **SetParagraphFormat** - 使用`ParagraphFormatConfig`结构一次性设置所有段落属性
+  - 基础格式：对齐方式、样式
+  - 间距设置：行间距、段前段后间距、首行缩进
+  - 缩进设置：首行缩进、左右缩进（支持悬挂缩进）
+  - 分页控制：与下段保持、行保持、段前分页、孤行控制
+  - 大纲级别：0-8级别设置
+
+**使用示例**：
+
+```go
+// 方法1：使用单独的方法设置
+title := doc.AddParagraph("第一章 概述")
+title.SetAlignment(document.AlignCenter)
+title.SetKeepWithNext(true)
+title.SetPageBreakBefore(true)
+title.SetOutlineLevel(0)
+
+// 方法2：使用SetParagraphFormat一次性设置
+para := doc.AddParagraph("重要内容")
+para.SetParagraphFormat(&document.ParagraphFormatConfig{
+    Alignment:       document.AlignJustify,
+    Style:           "Normal",
+    LineSpacing:     1.5,
+    BeforePara:      12,
+    AfterPara:       6,
+    FirstLineCm:     0.5,
+    KeepWithNext:    true,
+    KeepLines:       true,
+    WidowControl:    true,
+    OutlineLevel:    0,
+})
+```
+
+**应用场景**：
+- **文档结构化** - 使用大纲级别创建清晰的文档层次结构
+- **专业排版** - 使用分页控制确保标题和内容的关联性
+- **内容保护** - 使用行保持防止重要段落被分页
+- **章节管理** - 使用段前分页实现章节的页面独立性
 
 ### 段落内容操作
 - [`AddFormattedText(text string, format *TextFormat)`](document.go) - 添加格式化文本
+- [`AddPageBreak()`](document.go) - 向段落添加分页符 ✨ **新增**
 - [`ElementType()`](document.go) - 获取段落元素类型
 
 ## 文档主体操作方法
@@ -448,6 +548,62 @@ func demonstrateTemplateInheritance() {
 - [`SetTableShading(config *ShadingConfig)`](table.go#L2069) - 设置表格底纹
 - [`SetCellShading(row, col int, config *ShadingConfig)`](table.go#L2121) - 设置单元格底纹
 - [`SetAlternatingRowColors(evenRowColor, oddRowColor string)`](table.go#L2142) - 设置交替行颜色
+
+### 单元格图片功能 ✨ **新功能**
+
+支持向表格单元格中添加图片：
+
+- [`AddCellImage(table *Table, row, col int, config *CellImageConfig)`](image.go#L1106) - 向单元格添加图片（完整配置）
+- [`AddCellImageFromFile(table *Table, row, col int, filePath string, widthMM float64)`](image.go#L1214) - 从文件向单元格添加图片
+- [`AddCellImageFromData(table *Table, row, col int, data []byte, widthMM float64)`](image.go#L1236) - 从二进制数据向单元格添加图片
+
+#### CellImageConfig - 单元格图片配置
+```go
+type CellImageConfig struct {
+    FilePath        string      // 图片文件路径
+    Data            []byte      // 图片二进制数据（与FilePath二选一）
+    Format          ImageFormat // 图片格式（当使用Data时需要指定）
+    Width           float64     // 图片宽度（毫米），0表示自动
+    Height          float64     // 图片高度（毫米），0表示自动
+    KeepAspectRatio bool        // 是否保持宽高比
+    AltText         string      // 图片替代文字
+    Title           string      // 图片标题
+}
+```
+
+#### 表格单元格图片使用示例
+```go
+// 创建表格
+table, err := doc.AddTable(&document.TableConfig{
+    Rows:  2,
+    Cols:  2,
+    Width: 8000,
+})
+
+// 方式1：从文件添加图片到单元格
+imageInfo, err := doc.AddCellImageFromFile(table, 0, 0, "logo.png", 30) // 30mm宽度
+
+// 方式2：从二进制数据添加图片
+imageData := []byte{...} // 图片二进制数据
+imageInfo, err := doc.AddCellImageFromData(table, 0, 1, imageData, 25) // 25mm宽度
+
+// 方式3：使用完整配置
+config := &document.CellImageConfig{
+    FilePath:        "product.jpg",
+    Width:           50,     // 50mm宽度
+    Height:          40,     // 40mm高度
+    KeepAspectRatio: false,  // 不保持宽高比
+    AltText:         "产品图片",
+    Title:           "产品展示",
+}
+imageInfo, err := doc.AddCellImage(table, 1, 0, config)
+```
+
+**注意事项**：
+- 图片通过 `Document` 对象的方法添加，因为图片资源需要在文档级别管理
+- 支持 PNG、JPEG、GIF 格式的图片
+- 宽度/高度单位为毫米，设置为0时使用原始尺寸
+- 当设置 `KeepAspectRatio` 为 `true` 时，只需设置宽度或高度其中之一
 
 ### 单元格遍历迭代器 ✨ **新功能**
 

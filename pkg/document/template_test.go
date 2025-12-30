@@ -2,6 +2,12 @@
 package document
 
 import (
+	"archive/zip"
+	"fmt"
+	"io"
+	"os"
+	"path/filepath"
+	"strings"
 	"testing"
 )
 
@@ -669,4 +675,833 @@ func createTestImageData() []byte {
 		0x00, 0x00, 0x00, 0x49, 0x45, 0x4E, 0x44, 0xAE,
 		0x42, 0x60, 0x82,
 	}
+}
+
+// TestNestedLoops 测试嵌套循环功能
+func TestNestedLoops(t *testing.T) {
+	engine := NewTemplateEngine()
+
+	// 创建包含嵌套循环的模板
+	templateContent := `会议纪要
+
+日期：{{date}}
+
+参会人员：
+{{#each attendees}}
+- {{name}} ({{role}})
+  任务清单：
+  {{#each tasks}}
+  * {{taskName}} - 状态: {{status}}
+  {{/each}}
+{{/each}}
+
+会议总结：{{summary}}`
+
+	template, err := engine.LoadTemplate("meeting_minutes", templateContent)
+	if err != nil {
+		t.Fatalf("Failed to load template with nested loops: %v", err)
+	}
+
+	if len(template.Blocks) < 1 {
+		t.Error("Expected at least 1 block in template")
+	}
+
+	// 创建嵌套数据结构
+	data := NewTemplateData()
+	data.SetVariable("date", "2024-12-01")
+	data.SetVariable("summary", "会议圆满结束")
+
+	attendees := []interface{}{
+		map[string]interface{}{
+			"name": "张三",
+			"role": "项目经理",
+			"tasks": []interface{}{
+				map[string]interface{}{
+					"taskName": "制定项目计划",
+					"status":   "进行中",
+				},
+				map[string]interface{}{
+					"taskName": "分配资源",
+					"status":   "已完成",
+				},
+			},
+		},
+		map[string]interface{}{
+			"name": "李四",
+			"role": "开发工程师",
+			"tasks": []interface{}{
+				map[string]interface{}{
+					"taskName": "实现核心功能",
+					"status":   "进行中",
+				},
+				map[string]interface{}{
+					"taskName": "编写单元测试",
+					"status":   "待开始",
+				},
+			},
+		},
+	}
+	data.SetList("attendees", attendees)
+
+	// 渲染模板
+	doc, err := engine.RenderToDocument("meeting_minutes", data)
+	if err != nil {
+		t.Fatalf("Failed to render template with nested loops: %v", err)
+	}
+
+	if doc == nil {
+		t.Fatal("Expected document to be created")
+	}
+
+	// 验证文档内容
+	if len(doc.Body.Elements) == 0 {
+		t.Error("Expected document to have content")
+	}
+
+	// 检查生成的内容是否包含预期的嵌套数据
+	foundNestedContent := false
+	for _, element := range doc.Body.Elements {
+		if para, ok := element.(*Paragraph); ok {
+			fullText := ""
+			for _, run := range para.Runs {
+				fullText += run.Text.Content
+			}
+
+			// 检查是否包含嵌套循环生成的内容（任务名称）
+			if fullText == "  * 制定项目计划 - 状态: 进行中" ||
+				fullText == "  * 实现核心功能 - 状态: 进行中" {
+				foundNestedContent = true
+			}
+
+			// 确保没有未处理的模板语法
+			if fullText == "{{#each tasks}}" || fullText == "  * {{taskName}} - 状态: {{status}}" {
+				t.Errorf("Found unprocessed template syntax in output: %s", fullText)
+			}
+		}
+	}
+
+	if !foundNestedContent {
+		t.Error("Expected to find nested loop content in rendered document")
+	}
+}
+
+// TestDeepNestedLoops 测试深度嵌套循环（三层）
+func TestDeepNestedLoops(t *testing.T) {
+	engine := NewTemplateEngine()
+
+	// 创建三层嵌套循环的模板
+	templateContent := `组织架构：
+{{#each departments}}
+部门：{{name}}
+{{#each teams}}
+  团队：{{teamName}}
+  {{#each members}}
+    成员：{{memberName}} - {{position}}
+  {{/each}}
+{{/each}}
+{{/each}}`
+
+	_, err := engine.LoadTemplate("org_structure", templateContent)
+	if err != nil {
+		t.Fatalf("Failed to load template with deep nested loops: %v", err)
+	}
+
+	// 创建三层嵌套数据
+	data := NewTemplateData()
+
+	departments := []interface{}{
+		map[string]interface{}{
+			"name": "技术部",
+			"teams": []interface{}{
+				map[string]interface{}{
+					"teamName": "前端团队",
+					"members": []interface{}{
+						map[string]interface{}{
+							"memberName": "王五",
+							"position":   "前端工程师",
+						},
+						map[string]interface{}{
+							"memberName": "赵六",
+							"position":   "UI设计师",
+						},
+					},
+				},
+				map[string]interface{}{
+					"teamName": "后端团队",
+					"members": []interface{}{
+						map[string]interface{}{
+							"memberName": "孙七",
+							"position":   "后端工程师",
+						},
+					},
+				},
+			},
+		},
+	}
+	data.SetList("departments", departments)
+
+	// 渲染模板
+	doc, err := engine.RenderToDocument("org_structure", data)
+	if err != nil {
+		t.Fatalf("Failed to render template with deep nested loops: %v", err)
+	}
+
+	if doc == nil {
+		t.Fatal("Expected document to be created")
+	}
+
+	// 验证第三层嵌套内容是否正确渲染
+	foundDeepContent := false
+	for _, element := range doc.Body.Elements {
+		if para, ok := element.(*Paragraph); ok {
+			fullText := ""
+			for _, run := range para.Runs {
+				fullText += run.Text.Content
+			}
+
+			// 检查第三层嵌套内容
+			if fullText == "    成员：王五 - 前端工程师" ||
+				fullText == "    成员：孙七 - 后端工程师" {
+				foundDeepContent = true
+			}
+
+			// 确保没有未处理的模板语法
+			if fullText == "{{#each members}}" || fullText == "    成员：{{memberName}} - {{position}}" {
+				t.Errorf("Found unprocessed template syntax in deep nested output: %s", fullText)
+			}
+		}
+	}
+
+	if !foundDeepContent {
+		t.Error("Expected to find deep nested loop content in rendered document")
+	}
+}
+
+// TestHeaderFooterTemplateVariables 测试页眉页脚中的模板变量识别和替换
+func TestHeaderFooterTemplateVariables(t *testing.T) {
+	// 创建包含页眉页脚的文档
+	doc := New()
+
+	// 添加主体内容
+	doc.AddParagraph("{{title}}")
+	doc.AddParagraph("文档内容")
+
+	// 添加带有模板变量的页眉
+	err := doc.AddHeader(HeaderFooterTypeDefault, "{{headerTitle}} - {{headerID}}")
+	if err != nil {
+		t.Fatalf("添加页眉失败: %v", err)
+	}
+
+	// 添加带有模板变量的页脚
+	err = doc.AddFooter(HeaderFooterTypeDefault, "{{footerText}} - 第 {{pageNum}} 页")
+	if err != nil {
+		t.Fatalf("添加页脚失败: %v", err)
+	}
+
+	// 创建模板引擎并加载文档作为模板
+	engine := NewTemplateEngine()
+	template, err := engine.LoadTemplateFromDocument("header_footer_test", doc)
+	if err != nil {
+		t.Fatalf("从文档加载模板失败: %v", err)
+	}
+
+	// 验证模板变量被正确识别
+	expectedVars := []string{"title", "headerTitle", "headerID", "footerText", "pageNum"}
+	for _, varName := range expectedVars {
+		if _, exists := template.Variables[varName]; !exists {
+			t.Errorf("模板变量 '%s' 应该被识别但未找到", varName)
+		}
+	}
+
+	// 测试使用TemplateRenderer分析包含页眉页脚的模板
+	// 创建一个新的带页眉页脚的文档用于测试分析功能
+	doc2 := New()
+	doc2.AddParagraph("{{mainContent}}")
+	err = doc2.AddHeader(HeaderFooterTypeDefault, "{{documentTitle}}")
+	if err != nil {
+		t.Fatalf("添加页眉失败: %v", err)
+	}
+
+	// 通过engine加载
+	engine2 := NewTemplateEngine()
+	_, err = engine2.LoadTemplateFromDocument("analyze_test", doc2)
+	if err != nil {
+		t.Fatalf("从文档加载模板失败: %v", err)
+	}
+
+	// 创建renderer并使用已加载的模板
+	renderer := &TemplateRenderer{
+		engine: engine2,
+		logger: &TemplateLogger{enabled: false},
+	}
+
+	// 分析模板
+	analysis, err := renderer.AnalyzeTemplate("analyze_test")
+	if err != nil {
+		t.Fatalf("分析模板失败: %v", err)
+	}
+
+	// 验证分析结果包含页眉中的变量
+	if _, exists := analysis.Variables["documentTitle"]; !exists {
+		t.Error("分析结果应该包含页眉变量 'documentTitle'")
+	}
+	if _, exists := analysis.Variables["mainContent"]; !exists {
+		t.Error("分析结果应该包含主体变量 'mainContent'")
+	}
+
+	t.Logf("分析到的变量: %v", analysis.Variables)
+}
+
+// TestHeaderFooterVariableReplacement 测试页眉页脚中的变量替换功能
+func TestHeaderFooterVariableReplacement(t *testing.T) {
+	// 创建包含页眉页脚的文档
+	doc := New()
+
+	// 添加主体内容
+	doc.AddParagraph("{{title}}")
+	doc.AddParagraph("正文内容")
+
+	// 添加带有模板变量的页眉
+	err := doc.AddHeader(HeaderFooterTypeDefault, "报告编号: {{reportID}}")
+	if err != nil {
+		t.Fatalf("添加页眉失败: %v", err)
+	}
+
+	// 添加带有模板变量的页脚
+	err = doc.AddFooter(HeaderFooterTypeDefault, "作者: {{author}}")
+	if err != nil {
+		t.Fatalf("添加页脚失败: %v", err)
+	}
+
+	// 创建模板引擎并加载文档作为模板
+	engine := NewTemplateEngine()
+	_, err = engine.LoadTemplateFromDocument("replacement_test", doc)
+	if err != nil {
+		t.Fatalf("从文档加载模板失败: %v", err)
+	}
+
+	// 准备模板数据
+	data := NewTemplateData()
+	data.SetVariable("title", "测试报告标题")
+	data.SetVariable("reportID", "RPT-2024-001")
+	data.SetVariable("author", "测试作者")
+
+	// 渲染模板
+	resultDoc, err := engine.RenderTemplateToDocument("replacement_test", data)
+	if err != nil {
+		t.Fatalf("渲染模板失败: %v", err)
+	}
+
+	// 验证页眉中的变量被替换
+	headerReplaced := false
+	footerReplaced := false
+
+	for partName, partData := range resultDoc.parts {
+		content := string(partData)
+
+		if partName == "word/header1.xml" {
+			if !strings.Contains(content, "{{reportID}}") && strings.Contains(content, "RPT-2024-001") {
+				headerReplaced = true
+			}
+			t.Logf("页眉内容: %s", content)
+		}
+
+		if partName == "word/footer1.xml" {
+			if !strings.Contains(content, "{{author}}") && strings.Contains(content, "测试作者") {
+				footerReplaced = true
+			}
+			t.Logf("页脚内容: %s", content)
+		}
+	}
+
+	if !headerReplaced {
+		t.Error("页眉中的变量应该被替换")
+	}
+
+	if !footerReplaced {
+		t.Error("页脚中的变量应该被替换")
+	}
+}
+
+// TestTemplateFromFileWithParagraphSectionProperties 确保段落内的节属性仍能保留页眉页脚
+func TestTemplateFromFileWithParagraphSectionProperties(t *testing.T) {
+	doc := New()
+	doc.AddParagraph("{{title}}")
+
+	if err := doc.AddHeader(HeaderFooterTypeDefault, "报告编号: {{reportID}}"); err != nil {
+		t.Fatalf("添加页眉失败: %v", err)
+	}
+	if err := doc.AddFooter(HeaderFooterTypeDefault, "撰写人: {{author}}"); err != nil {
+		t.Fatalf("添加页脚失败: %v", err)
+	}
+
+	sectionMarker := "__SECTION_BREAK__"
+	doc.AddParagraph(sectionMarker)
+
+	tmpDir := t.TempDir()
+	basePath := filepath.Join(tmpDir, "base_paragraph_section.docx")
+	if err := doc.Save(basePath); err != nil {
+		t.Fatalf("保存基础文档失败: %v", err)
+	}
+
+	modifiedPath := filepath.Join(tmpDir, "paragraph_section_template.docx")
+	if err := moveSectPrIntoParagraph(basePath, modifiedPath, sectionMarker); err != nil {
+		t.Fatalf("调整节属性位置失败: %v", err)
+	}
+
+	loadedDoc, err := Open(modifiedPath)
+	if err != nil {
+		t.Fatalf("打开修改后的文档失败: %v", err)
+	}
+
+	engine := NewTemplateEngine()
+	_, err = engine.LoadTemplateFromDocument("paragraph_section_template", loadedDoc)
+	if err != nil {
+		t.Fatalf("加载模板失败: %v", err)
+	}
+
+	data := NewTemplateData()
+	data.SetVariable("title", "段落节属性测试")
+	data.SetVariable("reportID", "RPT-2024-009")
+	data.SetVariable("author", "测试作者")
+
+	renderedDoc, err := engine.RenderTemplateToDocument("paragraph_section_template", data)
+	if err != nil {
+		t.Fatalf("渲染模板失败: %v", err)
+	}
+
+	headerContent := string(renderedDoc.parts["word/header1.xml"])
+	if strings.Contains(headerContent, "{{reportID}}") {
+		t.Error("页眉中的变量应该被替换，即使节属性位于段落内")
+	}
+	if !strings.Contains(headerContent, "RPT-2024-009") {
+		t.Error("页眉中缺少替换后的值")
+	}
+
+	footerContent := string(renderedDoc.parts["word/footer1.xml"])
+	if strings.Contains(footerContent, "{{author}}") {
+		t.Error("页脚中的变量应该被替换")
+	}
+	if !strings.Contains(footerContent, "测试作者") {
+		t.Error("页脚中缺少替换后的值")
+	}
+}
+
+func moveSectPrIntoParagraph(srcPath, dstPath, marker string) error {
+	reader, err := zip.OpenReader(srcPath)
+	if err != nil {
+		return err
+	}
+	defer reader.Close()
+
+	output, err := os.Create(dstPath)
+	if err != nil {
+		return err
+	}
+	defer output.Close()
+
+	zipWriter := zip.NewWriter(output)
+	defer zipWriter.Close()
+
+	for _, file := range reader.File {
+		rc, err := file.Open()
+		if err != nil {
+			return err
+		}
+		data, err := io.ReadAll(rc)
+		rc.Close()
+		if err != nil {
+			return err
+		}
+
+		if file.Name == "word/document.xml" {
+			data, err = rewriteSectPrIntoParagraph(data, marker)
+			if err != nil {
+				return err
+			}
+		}
+
+		writer, err := zipWriter.Create(file.Name)
+		if err != nil {
+			return err
+		}
+		if _, err := writer.Write(data); err != nil {
+			return err
+		}
+	}
+
+	return nil
+}
+
+func rewriteSectPrIntoParagraph(xmlData []byte, marker string) ([]byte, error) {
+	content := string(xmlData)
+	sectStart := strings.Index(content, "<w:sectPr")
+	if sectStart == -1 {
+		return nil, fmt.Errorf("未找到sectPr")
+	}
+
+	sectEndRel := strings.Index(content[sectStart:], "</w:sectPr>")
+	if sectEndRel == -1 {
+		return nil, fmt.Errorf("sectPr缺少结束标签")
+	}
+	sectEnd := sectStart + sectEndRel + len("</w:sectPr>")
+	sectBlock := content[sectStart:sectEnd]
+
+	sanitized := removeHeaderFooterReferences(sectBlock)
+	content = content[:sectStart] + sanitized + content[sectEnd:]
+
+	markerIndex := strings.Index(content, marker)
+	if markerIndex == -1 {
+		return nil, fmt.Errorf("未找到标记段落")
+	}
+
+	pStart := strings.LastIndex(content[:markerIndex], "<w:p")
+	if pStart == -1 {
+		return nil, fmt.Errorf("未找到段落起始标签")
+	}
+	openEnd := strings.Index(content[pStart:], ">")
+	if openEnd == -1 {
+		return nil, fmt.Errorf("段落标签未闭合")
+	}
+	insertPos := pStart + openEnd + 1
+
+	insert := "<w:pPr>" + sectBlock + "</w:pPr>"
+	modified := content[:insertPos] + insert + content[insertPos:]
+
+	return []byte(modified), nil
+}
+
+func removeHeaderFooterReferences(block string) string {
+	block = stripReferenceTag(block, "<w:headerReference")
+	block = stripReferenceTag(block, "<w:footerReference")
+	return block
+}
+
+func stripReferenceTag(block, tag string) string {
+	for {
+		start := strings.Index(block, tag)
+		if start == -1 {
+			break
+		}
+		end := strings.Index(block[start:], "/>")
+		if end == -1 {
+			break
+		}
+		block = block[:start] + block[start+end+2:]
+	}
+	return block
+}
+
+// TestTemplateDocumentPartsPreservation 测试模板渲染时文档部件的完整保留
+func TestTemplateDocumentPartsPreservation(t *testing.T) {
+	// 创建包含多种文档部件的源文档
+	doc := New()
+
+	// 添加页眉和页脚
+	err := doc.AddHeader(HeaderFooterTypeDefault, "Template Header - {{headerVar}}")
+	if err != nil {
+		t.Fatalf("添加页眉失败: %v", err)
+	}
+
+	err = doc.AddFooter(HeaderFooterTypeDefault, "Template Footer - {{footerVar}}")
+	if err != nil {
+		t.Fatalf("添加页脚失败: %v", err)
+	}
+
+	// 设置页面设置
+	settings := DefaultPageSettings()
+	settings.Size = PageSizeA4
+	settings.Orientation = OrientationPortrait
+	err = doc.SetPageSettings(settings)
+	if err != nil {
+		t.Fatalf("设置页面设置失败: %v", err)
+	}
+
+	// 添加标题和内容
+	doc.AddHeadingParagraph("{{docTitle}}", 1)
+	doc.AddParagraph("Content with {{variable1}} and more text.")
+
+	// 保存原文档
+	originalPath := "test_parts_preservation_original.docx"
+	err = doc.Save(originalPath)
+	if err != nil {
+		t.Fatalf("保存原文档失败: %v", err)
+	}
+	defer func() {
+		if err := os.Remove(originalPath); err != nil {
+			t.Logf("清理原文档失败: %v", err)
+		}
+	}()
+
+	// 打开原文档作为模板
+	templateDoc, err := Open(originalPath)
+	if err != nil {
+		t.Fatalf("打开模板文档失败: %v", err)
+	}
+
+	// 记录原文档的parts
+	originalParts := make(map[string]bool)
+	for partName := range templateDoc.parts {
+		originalParts[partName] = true
+	}
+
+	// 创建模板引擎并加载模板
+	engine := NewTemplateEngine()
+	_, err = engine.LoadTemplateFromDocument("parts_test", templateDoc)
+	if err != nil {
+		t.Fatalf("加载模板失败: %v", err)
+	}
+
+	// 渲染模板
+	data := NewTemplateData()
+	data.SetVariable("headerVar", "Header Value")
+	data.SetVariable("footerVar", "Footer Value")
+	data.SetVariable("docTitle", "Document Title")
+	data.SetVariable("variable1", "Variable 1 Value")
+
+	renderedDoc, err := engine.RenderTemplateToDocument("parts_test", data)
+	if err != nil {
+		t.Fatalf("渲染模板失败: %v", err)
+	}
+
+	// 保存渲染后的文档
+	renderedPath := "test_parts_preservation_rendered.docx"
+	err = renderedDoc.Save(renderedPath)
+	if err != nil {
+		t.Fatalf("保存渲染后的文档失败: %v", err)
+	}
+	defer func() {
+		if err := os.Remove(renderedPath); err != nil {
+			t.Logf("清理渲染文档失败: %v", err)
+		}
+	}()
+
+	// 检查渲染后文档的parts
+	renderedParts := make(map[string]bool)
+	for partName := range renderedDoc.parts {
+		renderedParts[partName] = true
+	}
+
+	// 验证关键部件被保留
+	criticalParts := []string{
+		"word/styles.xml",
+		"word/header1.xml",
+		"word/footer1.xml",
+	}
+
+	for _, part := range criticalParts {
+		if originalParts[part] && !renderedParts[part] {
+			t.Errorf("关键部件 %s 在原文档中存在但在渲染后的文档中丢失", part)
+		}
+	}
+
+	// 验证页眉页脚变量被替换
+	headerContent := string(renderedDoc.parts["word/header1.xml"])
+	if strings.Contains(headerContent, "{{headerVar}}") {
+		t.Error("页眉中的变量应该被替换")
+	}
+	if !strings.Contains(headerContent, "Header Value") {
+		t.Error("页眉中应该包含替换后的值")
+	}
+
+	footerContent := string(renderedDoc.parts["word/footer1.xml"])
+	if strings.Contains(footerContent, "{{footerVar}}") {
+		t.Error("页脚中的变量应该被替换")
+	}
+	if !strings.Contains(footerContent, "Footer Value") {
+		t.Error("页脚中应该包含替换后的值")
+	}
+
+	t.Log("文档部件保留测试通过")
+}
+
+// TestTemplateSectionPropertiesPreservation 测试节属性在模板渲染时的保留
+func TestTemplateSectionPropertiesPreservation(t *testing.T) {
+	// 创建包含节属性的源文档
+	doc := New()
+
+	// 设置页面设置（这会创建SectionProperties）
+	settings := DefaultPageSettings()
+	settings.Size = PageSizeA4
+	settings.MarginTop = 30.0
+	settings.MarginBottom = 25.0
+	settings.MarginLeft = 20.0
+	settings.MarginRight = 20.0
+	err := doc.SetPageSettings(settings)
+	if err != nil {
+		t.Fatalf("设置页面设置失败: %v", err)
+	}
+
+	// 添加内容
+	doc.AddParagraph("Content with {{variable}}")
+
+	// 保存原文档
+	originalPath := "test_section_props_original.docx"
+	err = doc.Save(originalPath)
+	if err != nil {
+		t.Fatalf("保存原文档失败: %v", err)
+	}
+	defer func() {
+		if err := os.Remove(originalPath); err != nil {
+			t.Logf("清理原文档失败: %v", err)
+		}
+	}()
+
+	// 打开原文档作为模板
+	templateDoc, err := Open(originalPath)
+	if err != nil {
+		t.Fatalf("打开模板文档失败: %v", err)
+	}
+
+	// 获取原文档的页面设置
+	originalSettings := templateDoc.GetPageSettings()
+
+	// 创建模板引擎并加载模板
+	engine := NewTemplateEngine()
+	_, err = engine.LoadTemplateFromDocument("section_test", templateDoc)
+	if err != nil {
+		t.Fatalf("加载模板失败: %v", err)
+	}
+
+	// 渲染模板
+	data := NewTemplateData()
+	data.SetVariable("variable", "Value")
+
+	renderedDoc, err := engine.RenderTemplateToDocument("section_test", data)
+	if err != nil {
+		t.Fatalf("渲染模板失败: %v", err)
+	}
+
+	// 获取渲染后文档的页面设置
+	renderedSettings := renderedDoc.GetPageSettings()
+
+	// 验证页面设置被保留
+	if renderedSettings.Size != originalSettings.Size {
+		t.Errorf("页面大小不匹配: 期望 %v, 实际 %v", originalSettings.Size, renderedSettings.Size)
+	}
+
+	// 允许1mm的误差
+	tolerance := 1.0
+	if abs(renderedSettings.MarginTop-originalSettings.MarginTop) > tolerance {
+		t.Errorf("上边距不匹配: 期望 %.1f, 实际 %.1f", originalSettings.MarginTop, renderedSettings.MarginTop)
+	}
+	if abs(renderedSettings.MarginBottom-originalSettings.MarginBottom) > tolerance {
+		t.Errorf("下边距不匹配: 期望 %.1f, 实际 %.1f", originalSettings.MarginBottom, renderedSettings.MarginBottom)
+	}
+	if abs(renderedSettings.MarginLeft-originalSettings.MarginLeft) > tolerance {
+		t.Errorf("左边距不匹配: 期望 %.1f, 实际 %.1f", originalSettings.MarginLeft, renderedSettings.MarginLeft)
+	}
+	if abs(renderedSettings.MarginRight-originalSettings.MarginRight) > tolerance {
+		t.Errorf("右边距不匹配: 期望 %.1f, 实际 %.1f", originalSettings.MarginRight, renderedSettings.MarginRight)
+	}
+
+	t.Log("节属性保留测试通过")
+}
+
+// TestTemplateNumberingPropertiesPreservation 测试模板渲染时编号属性的保留
+func TestTemplateNumberingPropertiesPreservation(t *testing.T) {
+	// 创建包含编号段落的文档
+	doc := New()
+
+	// 添加带有编号的列表项
+	config := &ListConfig{
+		Type:        ListTypeNumber,
+		IndentLevel: 0,
+		StartNumber: 1,
+	}
+	doc.AddListItem("第一条 {{itemTitle}}", config)
+	doc.AddListItem("第二条 {{itemContent}}", config)
+
+	// 保存原文档
+	originalPath := "test_numbering_preservation_original.docx"
+	err := doc.Save(originalPath)
+	if err != nil {
+		t.Fatalf("保存原文档失败: %v", err)
+	}
+	defer func() {
+		if err := os.Remove(originalPath); err != nil {
+			t.Logf("清理原文档失败: %v", err)
+		}
+	}()
+
+	// 打开原文档作为模板
+	templateDoc, err := Open(originalPath)
+	if err != nil {
+		t.Fatalf("打开模板文档失败: %v", err)
+	}
+
+	// 验证原文档的编号属性被正确解析
+	paragraphs := templateDoc.Body.GetParagraphs()
+	if len(paragraphs) < 2 {
+		t.Fatalf("期望至少2个段落，实际 %d 个", len(paragraphs))
+	}
+
+	// 检查第一个段落的编号属性
+	if paragraphs[0].Properties == nil || paragraphs[0].Properties.NumberingProperties == nil {
+		t.Error("第一个段落的编号属性应该被解析")
+	}
+
+	// 创建模板引擎并加载模板
+	engine := NewTemplateEngine()
+	_, err = engine.LoadTemplateFromDocument("numbering_test", templateDoc)
+	if err != nil {
+		t.Fatalf("加载模板失败: %v", err)
+	}
+
+	// 渲染模板
+	data := NewTemplateData()
+	data.SetVariable("itemTitle", "合作项目情况")
+	data.SetVariable("itemContent", "合作项目背景")
+
+	renderedDoc, err := engine.RenderTemplateToDocument("numbering_test", data)
+	if err != nil {
+		t.Fatalf("渲染模板失败: %v", err)
+	}
+
+	// 保存渲染后的文档
+	renderedPath := "test_numbering_preservation_rendered.docx"
+	err = renderedDoc.Save(renderedPath)
+	if err != nil {
+		t.Fatalf("保存渲染后的文档失败: %v", err)
+	}
+	defer func() {
+		if err := os.Remove(renderedPath); err != nil {
+			t.Logf("清理渲染文档失败: %v", err)
+		}
+	}()
+
+	// 验证渲染后文档的编号属性被保留
+	renderedParagraphs := renderedDoc.Body.GetParagraphs()
+	if len(renderedParagraphs) < 2 {
+		t.Fatalf("渲染后期望至少2个段落，实际 %d 个", len(renderedParagraphs))
+	}
+
+	// 检查渲染后段落的编号属性是否被保留
+	for i, para := range renderedParagraphs[:2] {
+		if para.Properties == nil {
+			t.Errorf("段落 %d 的属性不应为空", i+1)
+			continue
+		}
+		if para.Properties.NumberingProperties == nil {
+			t.Errorf("段落 %d 的编号属性不应为空", i+1)
+			continue
+		}
+		if para.Properties.NumberingProperties.NumID == nil {
+			t.Errorf("段落 %d 的编号ID不应为空", i+1)
+		}
+		if para.Properties.NumberingProperties.ILevel == nil {
+			t.Errorf("段落 %d 的编号级别不应为空", i+1)
+		}
+	}
+
+	// 验证变量已被替换
+	firstParaText := ""
+	for _, run := range renderedParagraphs[0].Runs {
+		firstParaText += run.Text.Content
+	}
+	if !strings.Contains(firstParaText, "合作项目情况") {
+		t.Errorf("第一个段落应该包含替换后的变量值，实际内容: %s", firstParaText)
+	}
+
+	t.Log("编号属性保留测试通过")
 }

@@ -108,9 +108,23 @@ type ParagraphProperties struct {
 	NumberingProperties *NumberingProperties `xml:"w:numPr,omitempty"`
 	ParagraphBorder     *ParagraphBorder     `xml:"w:pBdr,omitempty"`
 	Tabs                *Tabs                `xml:"w:tabs,omitempty"`
+	SnapToGrid          *SnapToGrid          `xml:"w:snapToGrid,omitempty"` // 网格对齐设置
 	Spacing             *Spacing             `xml:"w:spacing,omitempty"`
 	Indentation         *Indentation         `xml:"w:ind,omitempty"`
 	Justification       *Justification       `xml:"w:jc,omitempty"`
+	KeepNext            *KeepNext            `xml:"w:keepNext,omitempty"`        // 与下一段落保持在一起
+	KeepLines           *KeepLines           `xml:"w:keepLines,omitempty"`       // 段落中的行保持在一起
+	PageBreakBefore     *PageBreakBefore     `xml:"w:pageBreakBefore,omitempty"` // 段前分页
+	WidowControl        *WidowControl        `xml:"w:widowControl,omitempty"`    // 孤行控制
+	OutlineLevel        *OutlineLevel        `xml:"w:outlineLvl,omitempty"`      // 大纲级别
+}
+
+// SnapToGrid 网格对齐设置
+// 设置为 "0" 或 "false" 时禁用网格对齐，允许自定义行间距生效
+// 注意：此类型在 style 包中有相同定义，这是有意为之，因为两个包可独立使用
+type SnapToGrid struct {
+	XMLName xml.Name `xml:"w:snapToGrid"`
+	Val     string   `xml:"w:val,attr,omitempty"`
 }
 
 // ParagraphBorder 段落边框
@@ -142,6 +156,36 @@ type Spacing struct {
 // Justification 对齐方式
 type Justification struct {
 	XMLName xml.Name `xml:"w:jc"`
+	Val     string   `xml:"w:val,attr,omitempty"`
+}
+
+// KeepNext 与下一段落保持在一起
+type KeepNext struct {
+	XMLName xml.Name `xml:"w:keepNext"`
+	Val     string   `xml:"w:val,attr,omitempty"`
+}
+
+// KeepLines 段落中的行保持在一起
+type KeepLines struct {
+	XMLName xml.Name `xml:"w:keepLines"`
+	Val     string   `xml:"w:val,attr,omitempty"`
+}
+
+// PageBreakBefore 段前分页
+type PageBreakBefore struct {
+	XMLName xml.Name `xml:"w:pageBreakBefore"`
+	Val     string   `xml:"w:val,attr,omitempty"`
+}
+
+// WidowControl 孤行控制
+type WidowControl struct {
+	XMLName xml.Name `xml:"w:widowControl"`
+	Val     string   `xml:"w:val,attr,omitempty"`
+}
+
+// OutlineLevel 大纲级别
+type OutlineLevel struct {
+	XMLName xml.Name `xml:"w:outlineLvl"`
 	Val     string   `xml:"w:val,attr"`
 }
 
@@ -151,9 +195,65 @@ type Run struct {
 	Properties *RunProperties  `xml:"w:rPr,omitempty"`
 	Tab        *TabDef         `xml:"w:tab,omitempty"`
 	Text       Text            `xml:"w:t,omitempty"`
+	Break      *Break          `xml:"w:br,omitempty"` // 分页符 / Page break
 	Drawing    *DrawingElement `xml:"w:drawing,omitempty"`
 	FieldChar  *FieldChar      `xml:"w:fldChar,omitempty"`
 	InstrText  *InstrText      `xml:"w:instrText,omitempty"`
+}
+
+// MarshalXML 自定义Run的XML序列化
+// 此方法确保只有非空元素才被序列化，特别是对于Drawing元素
+func (r *Run) MarshalXML(e *xml.Encoder, start xml.StartElement) error {
+	// 开始Run元素
+	if err := e.EncodeToken(start); err != nil {
+		return err
+	}
+
+	// 序列化RunProperties（如果存在）
+	if r.Properties != nil {
+		if err := e.EncodeElement(r.Properties, xml.StartElement{Name: xml.Name{Local: "w:rPr"}}); err != nil {
+			return err
+		}
+	}
+
+	// 序列化Text（仅当有内容时）
+	// 这是关键修复：避免序列化空的Text元素
+	if r.Text.Content != "" {
+		if err := e.EncodeElement(r.Text, xml.StartElement{Name: xml.Name{Local: "w:t"}}); err != nil {
+			return err
+		}
+	}
+
+	// 序列化Break（如果存在）
+	if r.Break != nil {
+		if err := e.EncodeElement(r.Break, xml.StartElement{Name: xml.Name{Local: "w:br"}}); err != nil {
+			return err
+		}
+	}
+
+	// 序列化Drawing（如果存在）
+	if r.Drawing != nil {
+		if err := e.EncodeElement(r.Drawing, xml.StartElement{Name: xml.Name{Local: "w:drawing"}}); err != nil {
+			return err
+		}
+	}
+
+	// 序列化FieldChar（如果存在）
+	if r.FieldChar != nil {
+		if err := e.EncodeElement(r.FieldChar, xml.StartElement{Name: xml.Name{Local: "w:fldChar"}}); err != nil {
+			return err
+		}
+	}
+
+	// 序列化InstrText（如果存在）
+	if r.InstrText != nil {
+		if err := e.EncodeElement(r.InstrText, xml.StartElement{Name: xml.Name{Local: "w:instrText"}}); err != nil {
+			return err
+		}
+	}
+
+	// 结束Run元素
+	return e.EncodeToken(xml.EndElement{Name: start.Name})
 }
 
 // RunProperties 文本属性
@@ -233,6 +333,13 @@ type Text struct {
 	XMLName xml.Name `xml:"w:t"`
 	Space   string   `xml:"xml:space,attr,omitempty"`
 	Content string   `xml:",chardata"`
+}
+
+// Break 分页符
+// Break represents page breaks in Word documents
+type Break struct {
+	XMLName xml.Name `xml:"w:br"`
+	Type    string   `xml:"w:type,attr,omitempty"` // "page" 表示分页符 / "page" indicates a page break
 }
 
 // Relationships 文档关系
@@ -371,7 +478,7 @@ func New() *Document {
 		},
 		styleManager: style.NewStyleManager(),
 		parts:        make(map[string][]byte),
-		nextImageID:  1, // 初始化图片ID计数器，从1开始
+		nextImageID:  0, // 初始化图片ID计数器，从0开始
 		documentRelationships: &Relationships{
 			Xmlns:         "http://schemas.openxmlformats.org/package/2006/relationships",
 			Relationships: []Relationship{},
@@ -416,17 +523,53 @@ func Open(filename string) (*Document, error) {
 	}
 	defer reader.Close()
 
+	doc, err := openFromZipReader(&reader.Reader, filename)
+	if err != nil {
+		return nil, err
+	}
+
+	Infof("成功打开文档: %s", filename)
+	return doc, nil
+}
+
+func OpenFromMemory(readCloser io.ReadCloser) (*Document, error) {
+	defer readCloser.Close()
+	Infof("正在打开文档")
+
+	fileData, err := io.ReadAll(readCloser)
+	if err != nil {
+		return nil, fmt.Errorf("读取文件内容失败: %w", err)
+	}
+
+	readerAt := bytes.NewReader(fileData)
+	size := int64(len(fileData))
+	reader, err := zip.NewReader(readerAt, size)
+	if err != nil {
+		Errorf("无法打开文件")
+		return nil, WrapErrorWithContext("open_file", err, "")
+	}
+
+	doc, err := openFromZipReader(reader, "内存")
+	if err != nil {
+		return nil, err
+	}
+
+	Infof("成功打开文档")
+	return doc, nil
+}
+
+func openFromZipReader(zipReader *zip.Reader, filename string) (*Document, error) {
 	doc := &Document{
 		parts: make(map[string][]byte),
 		documentRelationships: &Relationships{
 			Xmlns:         "http://schemas.openxmlformats.org/package/2006/relationships",
 			Relationships: []Relationship{},
 		},
-		nextImageID: 1, // 初始化图片ID计数器
+		nextImageID: 0, // 初始化图片ID计数器，从0开始
 	}
 
 	// 读取所有文件部件
-	for _, file := range reader.File {
+	for _, file := range zipReader.File {
 		rc, err := file.Open()
 		if err != nil {
 			Errorf("无法打开文件部件: %s", file.Name)
@@ -447,6 +590,39 @@ func Open(filename string) (*Document, error) {
 	// 初始化样式管理器
 	doc.styleManager = style.NewStyleManager()
 
+	// 解析内容类型
+	if err := doc.parseContentTypes(); err != nil {
+		Debugf("解析内容类型失败，使用默认值: %v", err)
+		// 如果解析失败，使用默认值
+		doc.contentTypes = &ContentTypes{
+			Xmlns: "http://schemas.openxmlformats.org/package/2006/content-types",
+			Defaults: []Default{
+				{Extension: "rels", ContentType: "application/vnd.openxmlformats-package.relationships+xml"},
+				{Extension: "xml", ContentType: "application/xml"},
+			},
+			Overrides: []Override{
+				{PartName: "/word/document.xml", ContentType: "application/vnd.openxmlformats-officedocument.wordprocessingml.document.main+xml"},
+				{PartName: "/word/styles.xml", ContentType: "application/vnd.openxmlformats-officedocument.wordprocessingml.styles+xml"},
+			},
+		}
+	}
+
+	// 解析关系
+	if err := doc.parseRelationships(); err != nil {
+		Debugf("解析关系失败，使用默认值: %v", err)
+		// 如果解析失败，使用默认值
+		doc.relationships = &Relationships{
+			Xmlns: "http://schemas.openxmlformats.org/package/2006/relationships",
+			Relationships: []Relationship{
+				{
+					ID:     "rId1",
+					Type:   "http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument",
+					Target: "word/document.xml",
+				},
+			},
+		}
+	}
+
 	// 解析主文档
 	if err := doc.parseDocument(); err != nil {
 		Errorf("解析文档失败: %s", filename)
@@ -460,8 +636,17 @@ func Open(filename string) (*Document, error) {
 		doc.styleManager = style.NewStyleManager()
 	}
 
-	Infof("成功打开文档: %s", filename)
+	// 解析文档关系（包括图片等资源的关系）
+	if err := doc.parseDocumentRelationships(); err != nil {
+		Debugf("解析文档关系失败，使用默认值: %v", err)
+		// 如果解析失败，保持初始化的空关系列表
+	}
+
+	// 根据已有的图片关系更新nextImageID计数器
+	doc.updateNextImageID()
+
 	return doc, nil
+
 }
 
 // Save 将文档保存到指定的文件路径。
@@ -856,6 +1041,26 @@ func (p *Paragraph) AddFormattedText(text string, format *TextFormat) {
 	Debugf("向段落添加格式化文本: %s", text)
 }
 
+// AddPageBreak 向段落添加一个分页符。
+//
+// 此方法在当前段落中添加一个分页符，分页符之后的内容将显示在新页面上。
+// 与 Document.AddPageBreak() 不同，此方法不会创建新段落，而是在当前段落的运行中添加分页符。
+//
+// 示例:
+//
+//	para := doc.AddParagraph("第一页的内容")
+//	para.AddPageBreak()
+//	para.AddFormattedText("第二页的内容", nil)
+func (p *Paragraph) AddPageBreak() {
+	run := Run{
+		Break: &Break{
+			Type: "page",
+		},
+	}
+	p.Runs = append(p.Runs, run)
+	Debugf("向段落添加分页符")
+}
+
 // AddHeadingParagraph 向文档添加一个标题段落。
 //
 // 参数 text 是标题的文本内容。
@@ -1007,6 +1212,34 @@ func (d *Document) AddHeadingParagraphWithBookmark(text string, level int, addBo
 	return p
 }
 
+// AddPageBreak 向文档添加一个分页符。
+//
+// 分页符会强制在当前位置开始一个新页面。
+// 此方法会创建一个包含分页符的段落。
+//
+// 示例:
+//
+//	doc := document.New()
+//	doc.AddParagraph("第一页内容")
+//	doc.AddPageBreak()
+//	doc.AddParagraph("第二页内容")
+func (d *Document) AddPageBreak() {
+	Debugf("添加分页符")
+
+	// 创建一个包含分页符的段落
+	p := &Paragraph{
+		Runs: []Run{
+			{
+				Break: &Break{
+					Type: "page",
+				},
+			},
+		},
+	}
+
+	d.Body.Elements = append(d.Body.Elements, p)
+}
+
 // SetStyle 设置段落的样式。
 //
 // 参数 styleID 是要应用的样式ID，如 "Heading1"、"Normal" 等。
@@ -1060,6 +1293,296 @@ func (p *Paragraph) SetIndentation(firstLineCm, leftCm, rightCm float64) {
 	}
 
 	Debugf("设置段落缩进: 首行=%.2fcm, 左=%.2fcm, 右=%.2fcm", firstLineCm, leftCm, rightCm)
+}
+
+// SetKeepWithNext 设置段落与下一段落保持在同一页。
+//
+// 此方法用于确保当前段落和下一段落不会被分页符分隔，
+// 常用于标题和正文的组合，或需要保持连续性的内容。
+//
+// 参数：
+//   - keep: true表示启用该属性，false表示禁用
+//
+// 示例：
+//
+//	// 标题与下一段保持在一起
+//	title := doc.AddParagraph("第一章 概述")
+//	title.SetKeepWithNext(true)
+//	doc.AddParagraph("本章介绍...")  // 这段内容会与标题保持在同一页
+func (p *Paragraph) SetKeepWithNext(keep bool) {
+	if p.Properties == nil {
+		p.Properties = &ParagraphProperties{}
+	}
+
+	if keep {
+		p.Properties.KeepNext = &KeepNext{Val: "1"}
+		Debugf("设置段落与下一段保持在一起")
+	} else {
+		p.Properties.KeepNext = nil
+		Debugf("取消段落与下一段保持在一起")
+	}
+}
+
+// SetKeepLines 设置段落中的所有行保持在同一页。
+//
+// 此方法用于防止段落在分页时被拆分到多个页面，
+// 确保段落的所有行都显示在同一页上。
+//
+// 参数：
+//   - keep: true表示启用该属性，false表示禁用
+//
+// 示例：
+//
+//	// 确保整个段落不被分页
+//	para := doc.AddParagraph("这是一个重要的段落，需要保持完整显示。")
+//	para.SetKeepLines(true)
+func (p *Paragraph) SetKeepLines(keep bool) {
+	if p.Properties == nil {
+		p.Properties = &ParagraphProperties{}
+	}
+
+	if keep {
+		p.Properties.KeepLines = &KeepLines{Val: "1"}
+		Debugf("设置段落行保持在一起")
+	} else {
+		p.Properties.KeepLines = nil
+		Debugf("取消段落行保持在一起")
+	}
+}
+
+// SetPageBreakBefore 设置段落前插入分页符。
+//
+// 此方法用于在段落之前强制插入分页符，使段落从新页开始显示。
+// 常用于章节标题或需要单独成页的内容。
+//
+// 参数：
+//   - pageBreak: true表示启用段前分页，false表示禁用
+//
+// 示例：
+//
+//	// 章节标题从新页开始
+//	chapter := doc.AddParagraph("第二章 详细说明")
+//	chapter.SetPageBreakBefore(true)
+func (p *Paragraph) SetPageBreakBefore(pageBreak bool) {
+	if p.Properties == nil {
+		p.Properties = &ParagraphProperties{}
+	}
+
+	if pageBreak {
+		p.Properties.PageBreakBefore = &PageBreakBefore{Val: "1"}
+		Debugf("设置段前分页")
+	} else {
+		p.Properties.PageBreakBefore = nil
+		Debugf("取消段前分页")
+	}
+}
+
+// SetWidowControl 设置段落的孤行控制。
+//
+// 孤行控制用于防止段落的第一行或最后一行单独出现在页面底部或顶部，
+// 提高文档的排版质量。
+//
+// 参数：
+//   - control: true表示启用孤行控制（默认），false表示禁用
+//
+// 示例：
+//
+//	para := doc.AddParagraph("这是一个长段落...")
+//	para.SetWidowControl(true)  // 启用孤行控制
+func (p *Paragraph) SetWidowControl(control bool) {
+	if p.Properties == nil {
+		p.Properties = &ParagraphProperties{}
+	}
+
+	if control {
+		p.Properties.WidowControl = &WidowControl{Val: "1"}
+		Debugf("启用段落孤行控制")
+	} else {
+		p.Properties.WidowControl = &WidowControl{Val: "0"}
+		Debugf("禁用段落孤行控制")
+	}
+}
+
+// SetOutlineLevel 设置段落的大纲级别。
+//
+// 大纲级别用于在文档导航窗格中显示文档结构，级别范围为0-8。
+// 通常用于标题段落，配合目录功能使用。
+//
+// 参数：
+//   - level: 大纲级别，0-8之间的整数（0表示正文，1-8对应标题1-8）
+//
+// 示例：
+//
+//	// 设置为一级标题的大纲级别
+//	title := doc.AddParagraph("第一章")
+//	title.SetOutlineLevel(0)  // 对应Heading1
+//
+//	// 设置为二级标题的大纲级别
+//	subtitle := doc.AddParagraph("1.1 概述")
+//	subtitle.SetOutlineLevel(1)  // 对应Heading2
+func (p *Paragraph) SetOutlineLevel(level int) {
+	if p.Properties == nil {
+		p.Properties = &ParagraphProperties{}
+	}
+
+	if level < 0 || level > 8 {
+		Warnf("大纲级别应在0-8之间，已调整为有效范围")
+		if level < 0 {
+			level = 0
+		} else {
+			level = 8
+		}
+	}
+
+	p.Properties.OutlineLevel = &OutlineLevel{Val: strconv.Itoa(level)}
+	Debugf("设置段落大纲级别: %d", level)
+}
+
+// SetSnapToGrid 设置段落的网格对齐属性。
+//
+// 网格对齐控制段落的行是否对齐到文档的网格。当文档启用了网格设置时
+// （如中文文档中常见的"如果定义了文档网格，则对齐到网格"选项），
+// 自定义的行间距可能不会精确生效，因为行会自动对齐到网格线。
+//
+// 通过设置 snapToGrid 为 false，可以禁用该段落的网格对齐，
+// 从而使自定义行间距能够精确生效。
+//
+// 参数：
+//   - snapToGrid: true表示启用网格对齐（默认），false表示禁用网格对齐
+//
+// 示例：
+//
+//	// 禁用网格对齐，使自定义行间距精确生效
+//	para := doc.AddParagraph("这段文字使用精确的行间距")
+//	para.SetSpacing(&document.SpacingConfig{LineSpacing: 1.5})
+//	para.SetSnapToGrid(false)  // 禁用网格对齐
+func (p *Paragraph) SetSnapToGrid(snapToGrid bool) {
+	if p.Properties == nil {
+		p.Properties = &ParagraphProperties{}
+	}
+
+	if !snapToGrid {
+		p.Properties.SnapToGrid = &SnapToGrid{Val: "0"}
+		Debugf("禁用段落网格对齐")
+	} else {
+		// 启用网格对齐时移除设置（使用默认行为）
+		p.Properties.SnapToGrid = nil
+		Debugf("启用段落网格对齐（默认）")
+	}
+}
+
+// ParagraphFormatConfig 段落格式配置
+//
+// 此结构体提供了段落所有格式属性的统一配置接口，
+// 允许一次性设置多个段落属性，提高代码的可读性和易用性。
+type ParagraphFormatConfig struct {
+	// 基础格式
+	Alignment AlignmentType // 对齐方式（AlignLeft, AlignCenter, AlignRight, AlignJustify）
+	Style     string        // 段落样式ID（如"Heading1", "Normal"等）
+
+	// 间距设置
+	LineSpacing     float64 // 行间距（倍数，如1.5表示1.5倍行距）
+	BeforePara      int     // 段前间距（磅）
+	AfterPara       int     // 段后间距（磅）
+	FirstLineIndent int     // 首行缩进（磅）
+
+	// 缩进设置
+	FirstLineCm float64 // 首行缩进（厘米，可以为负数表示悬挂缩进）
+	LeftCm      float64 // 左缩进（厘米）
+	RightCm     float64 // 右缩进（厘米）
+
+	// 分页与控制
+	KeepWithNext    bool  // 与下一段落保持在同一页
+	KeepLines       bool  // 段落中的所有行保持在同一页
+	PageBreakBefore bool  // 段前分页
+	WidowControl    bool  // 孤行控制
+	SnapToGrid      *bool // 是否对齐网格（设置为false可禁用网格对齐，使自定义行间距精确生效）
+
+	// 大纲级别
+	OutlineLevel int // 大纲级别（0-8，0表示正文，1-8对应标题1-8）
+}
+
+// SetParagraphFormat 使用配置一次性设置段落的所有格式属性。
+//
+// 此方法提供了一种便捷的方式来设置段落的所有格式属性，
+// 而不需要调用多个单独的设置方法。只有非零值的属性会被应用。
+//
+// 参数：
+//   - config: 段落格式配置，包含所有格式属性
+//
+// 示例：
+//
+//	// 创建一个带完整格式的段落
+//	para := doc.AddParagraph("重要章节标题")
+//	para.SetParagraphFormat(&document.ParagraphFormatConfig{
+//		Alignment:       document.AlignCenter,
+//		Style:           "Heading1",
+//		LineSpacing:     1.5,
+//		BeforePara:      24,
+//		AfterPara:       12,
+//		KeepWithNext:    true,
+//		PageBreakBefore: true,
+//		OutlineLevel:    0,
+//	})
+//
+//	// 设置带缩进的正文段落
+//	para2 := doc.AddParagraph("正文内容...")
+//	para2.SetParagraphFormat(&document.ParagraphFormatConfig{
+//		Alignment:       document.AlignJustify,
+//		FirstLineCm:     0.5,
+//		LineSpacing:     1.5,
+//		BeforePara:      6,
+//		AfterPara:       6,
+//		WidowControl:    true,
+//	})
+func (p *Paragraph) SetParagraphFormat(config *ParagraphFormatConfig) {
+	if config == nil {
+		return
+	}
+
+	// 设置对齐方式
+	if config.Alignment != "" {
+		p.SetAlignment(config.Alignment)
+	}
+
+	// 设置样式
+	if config.Style != "" {
+		p.SetStyle(config.Style)
+	}
+
+	// 设置间距（如果有任何间距设置）
+	if config.LineSpacing > 0 || config.BeforePara > 0 || config.AfterPara > 0 || config.FirstLineIndent > 0 {
+		p.SetSpacing(&SpacingConfig{
+			LineSpacing:     config.LineSpacing,
+			BeforePara:      config.BeforePara,
+			AfterPara:       config.AfterPara,
+			FirstLineIndent: config.FirstLineIndent,
+		})
+	}
+
+	// 设置缩进（如果有任何缩进设置）
+	if config.FirstLineCm != 0 || config.LeftCm != 0 || config.RightCm != 0 {
+		p.SetIndentation(config.FirstLineCm, config.LeftCm, config.RightCm)
+	}
+
+	// 设置分页和控制属性
+	p.SetKeepWithNext(config.KeepWithNext)
+	p.SetKeepLines(config.KeepLines)
+	p.SetPageBreakBefore(config.PageBreakBefore)
+	p.SetWidowControl(config.WidowControl)
+
+	// 设置网格对齐
+	if config.SnapToGrid != nil {
+		p.SetSnapToGrid(*config.SnapToGrid)
+	}
+
+	// 设置大纲级别
+	if config.OutlineLevel >= 0 && config.OutlineLevel <= 8 {
+		p.SetOutlineLevel(config.OutlineLevel)
+	}
+
+	Debugf("应用段落格式配置: 对齐=%s, 样式=%s, 行距=%.1f, 段前=%d, 段后=%d",
+		config.Alignment, config.Style, config.LineSpacing, config.BeforePara, config.AfterPara)
 }
 
 // ParagraphBorderConfig 段落边框配置（区别于表格边框配置）
@@ -1199,6 +1722,212 @@ func (p *Paragraph) SetHorizontalRule(style BorderStyle, size int, color string)
 	p.SetBorder(nil, nil, borderConfig, nil)
 
 	Debugf("设置水平分割线: 样式=%s, 粗细=%d, 颜色=%s", style, size, color)
+}
+
+// SetUnderline 设置段落中所有文本的下划线效果。
+//
+// 参数 underline 表示是否启用下划线。
+// 当设置为 true 时，将对段落中所有运行应用单线下划线效果。
+// 当设置为 false 时，将移除所有运行的下划线效果。
+//
+// 示例:
+//
+//	para := doc.AddParagraph("这是下划线文本")
+//	para.SetUnderline(true)
+func (p *Paragraph) SetUnderline(underline bool) {
+	for i := range p.Runs {
+		if p.Runs[i].Properties == nil {
+			p.Runs[i].Properties = &RunProperties{}
+		}
+		if underline {
+			p.Runs[i].Properties.Underline = &Underline{Val: "single"}
+		} else {
+			p.Runs[i].Properties.Underline = nil
+		}
+	}
+	Debugf("设置段落下划线: %v", underline)
+}
+
+// SetBold 设置段落中所有文本的粗体效果。
+//
+// 参数 bold 表示是否启用粗体。
+// 当设置为 true 时，将对段落中所有运行应用粗体效果。
+// 当设置为 false 时，将移除所有运行的粗体效果。
+//
+// 示例:
+//
+//	para := doc.AddParagraph("这是粗体文本")
+//	para.SetBold(true)
+func (p *Paragraph) SetBold(bold bool) {
+	for i := range p.Runs {
+		if p.Runs[i].Properties == nil {
+			p.Runs[i].Properties = &RunProperties{}
+		}
+		if bold {
+			p.Runs[i].Properties.Bold = &Bold{}
+			p.Runs[i].Properties.BoldCs = &BoldCs{}
+		} else {
+			p.Runs[i].Properties.Bold = nil
+			p.Runs[i].Properties.BoldCs = nil
+		}
+	}
+	Debugf("设置段落粗体: %v", bold)
+}
+
+// SetItalic 设置段落中所有文本的斜体效果。
+//
+// 参数 italic 表示是否启用斜体。
+// 当设置为 true 时，将对段落中所有运行应用斜体效果。
+// 当设置为 false 时，将移除所有运行的斜体效果。
+//
+// 示例:
+//
+//	para := doc.AddParagraph("这是斜体文本")
+//	para.SetItalic(true)
+func (p *Paragraph) SetItalic(italic bool) {
+	for i := range p.Runs {
+		if p.Runs[i].Properties == nil {
+			p.Runs[i].Properties = &RunProperties{}
+		}
+		if italic {
+			p.Runs[i].Properties.Italic = &Italic{}
+			p.Runs[i].Properties.ItalicCs = &ItalicCs{}
+		} else {
+			p.Runs[i].Properties.Italic = nil
+			p.Runs[i].Properties.ItalicCs = nil
+		}
+	}
+	Debugf("设置段落斜体: %v", italic)
+}
+
+// SetStrike 设置段落中所有文本的删除线效果。
+//
+// 参数 strike 表示是否启用删除线。
+// 当设置为 true 时，将对段落中所有运行应用删除线效果。
+// 当设置为 false 时，将移除所有运行的删除线效果。
+//
+// 示例:
+//
+//	para := doc.AddParagraph("这是删除线文本")
+//	para.SetStrike(true)
+func (p *Paragraph) SetStrike(strike bool) {
+	for i := range p.Runs {
+		if p.Runs[i].Properties == nil {
+			p.Runs[i].Properties = &RunProperties{}
+		}
+		if strike {
+			p.Runs[i].Properties.Strike = &Strike{}
+		} else {
+			p.Runs[i].Properties.Strike = nil
+		}
+	}
+	Debugf("设置段落删除线: %v", strike)
+}
+
+// SetHighlight 设置段落中所有文本的高亮颜色。
+//
+// 参数 color 是高亮颜色名称，支持的颜色包括：
+// "yellow", "green", "cyan", "magenta", "blue", "red", "darkBlue",
+// "darkCyan", "darkGreen", "darkMagenta", "darkRed", "darkYellow",
+// "darkGray", "lightGray", "black" 等。
+// 传入空字符串将移除高亮效果。
+//
+// 示例:
+//
+//	para := doc.AddParagraph("这是高亮文本")
+//	para.SetHighlight("yellow")
+func (p *Paragraph) SetHighlight(color string) {
+	for i := range p.Runs {
+		if p.Runs[i].Properties == nil {
+			p.Runs[i].Properties = &RunProperties{}
+		}
+		if color != "" {
+			p.Runs[i].Properties.Highlight = &Highlight{Val: color}
+		} else {
+			p.Runs[i].Properties.Highlight = nil
+		}
+	}
+	Debugf("设置段落高亮: %s", color)
+}
+
+// SetFontFamily 设置段落中所有文本的字体。
+//
+// 参数 name 是字体名称，如 "Arial"、"Times New Roman"、"微软雅黑" 等。
+//
+// 示例:
+//
+//	para := doc.AddParagraph("这是自定义字体文本")
+//	para.SetFontFamily("微软雅黑")
+func (p *Paragraph) SetFontFamily(name string) {
+	for i := range p.Runs {
+		if p.Runs[i].Properties == nil {
+			p.Runs[i].Properties = &RunProperties{}
+		}
+		if name != "" {
+			p.Runs[i].Properties.FontFamily = &FontFamily{
+				ASCII:    name,
+				HAnsi:    name,
+				EastAsia: name,
+				CS:       name,
+			}
+		} else {
+			p.Runs[i].Properties.FontFamily = nil
+		}
+	}
+	Debugf("设置段落字体: %s", name)
+}
+
+// SetFontSize 设置段落中所有文本的字体大小。
+//
+// 参数 size 是字体大小（磅），如 12、14、16 等。
+// 传入 0 或负数将移除字体大小设置。
+//
+// 示例:
+//
+//	para := doc.AddParagraph("这是大号文本")
+//	para.SetFontSize(16)
+func (p *Paragraph) SetFontSize(size int) {
+	for i := range p.Runs {
+		if p.Runs[i].Properties == nil {
+			p.Runs[i].Properties = &RunProperties{}
+		}
+		if size > 0 {
+			// Word 使用半磅为单位，所以乘以2
+			sizeStr := strconv.Itoa(size * 2)
+			p.Runs[i].Properties.FontSize = &FontSize{Val: sizeStr}
+			p.Runs[i].Properties.FontSizeCs = &FontSizeCs{Val: sizeStr}
+		} else {
+			p.Runs[i].Properties.FontSize = nil
+			p.Runs[i].Properties.FontSizeCs = nil
+		}
+	}
+	Debugf("设置段落字体大小: %d", size)
+}
+
+// SetColor 设置段落中所有文本的颜色。
+//
+// 参数 color 是十六进制颜色值，如 "FF0000"（红色）、"0000FF"（蓝色）等。
+// 颜色值不需要 "#" 前缀，如果包含会自动移除。
+// 传入空字符串将移除颜色设置。
+//
+// 示例:
+//
+//	para := doc.AddParagraph("这是红色文本")
+//	para.SetColor("FF0000")
+func (p *Paragraph) SetColor(color string) {
+	for i := range p.Runs {
+		if p.Runs[i].Properties == nil {
+			p.Runs[i].Properties = &RunProperties{}
+		}
+		if color != "" {
+			// 移除可能存在的 # 前缀
+			colorVal := strings.TrimPrefix(color, "#")
+			p.Runs[i].Properties.Color = &Color{Val: colorVal}
+		} else {
+			p.Runs[i].Properties.Color = nil
+		}
+	}
+	Debugf("设置段落颜色: %s", color)
 }
 
 // GetStyleManager 获取文档的样式管理器。
@@ -1477,6 +2206,20 @@ func (d *Document) parseParagraphProperties(decoder *xml.Decoder, paragraph *Par
 				if err := d.skipElement(decoder, t.Name.Local); err != nil {
 					return err
 				}
+			case "numPr":
+				// 编号属性
+				numPr, err := d.parseNumberingProperties(decoder)
+				if err != nil {
+					return err
+				}
+				paragraph.Properties.NumberingProperties = numPr
+			case "sectPr":
+				// 一些文档将节属性存储在段落属性中
+				sectPr, err := d.parseSectionProperties(decoder, t)
+				if err != nil {
+					return err
+				}
+				d.setSectionProperties(sectPr)
 			default:
 				if err := d.skipElement(decoder, t.Name.Local); err != nil {
 					return err
@@ -1485,6 +2228,50 @@ func (d *Document) parseParagraphProperties(decoder *xml.Decoder, paragraph *Par
 		case xml.EndElement:
 			if t.Name.Local == "pPr" {
 				return nil
+			}
+		}
+	}
+}
+
+// parseNumberingProperties 解析编号属性
+func (d *Document) parseNumberingProperties(decoder *xml.Decoder) (*NumberingProperties, error) {
+	numPr := &NumberingProperties{}
+
+	for {
+		token, err := decoder.Token()
+		if err != nil {
+			return nil, WrapError("parse_numbering_properties", err)
+		}
+
+		switch t := token.(type) {
+		case xml.StartElement:
+			switch t.Name.Local {
+			case "ilvl":
+				// 编号级别
+				val := getAttributeValue(t.Attr, "val")
+				if val != "" {
+					numPr.ILevel = &ILevel{Val: val}
+				}
+				if err := d.skipElement(decoder, t.Name.Local); err != nil {
+					return nil, err
+				}
+			case "numId":
+				// 编号ID
+				val := getAttributeValue(t.Attr, "val")
+				if val != "" {
+					numPr.NumID = &NumID{Val: val}
+				}
+				if err := d.skipElement(decoder, t.Name.Local); err != nil {
+					return nil, err
+				}
+			default:
+				if err := d.skipElement(decoder, t.Name.Local); err != nil {
+					return nil, err
+				}
+			}
+		case xml.EndElement:
+			if t.Name.Local == "numPr" {
+				return numPr, nil
 			}
 		}
 	}
@@ -1521,6 +2308,13 @@ func (d *Document) parseRun(decoder *xml.Decoder, startElement xml.StartElement)
 					return nil, err
 				}
 				run.Text.Content = content
+			case "drawing":
+				// 解析绘图元素（图片等）
+				drawing, err := d.parseDrawingElement(decoder, t)
+				if err != nil {
+					return nil, err
+				}
+				run.Drawing = drawing
 			default:
 				if err := d.skipElement(decoder, t.Name.Local); err != nil {
 					return nil, err
@@ -1925,7 +2719,9 @@ func (d *Document) parseTableCell(decoder *xml.Decoder, startElement xml.StartEl
 
 // parseSectionProperties 解析节属性
 func (d *Document) parseSectionProperties(decoder *xml.Decoder, startElement xml.StartElement) (*SectionProperties, error) {
-	sectPr := &SectionProperties{}
+	sectPr := &SectionProperties{
+		XmlnsR: getAttributeValue(startElement.Attr, "xmlns:r"),
+	}
 
 	for {
 		token, err := decoder.Token()
@@ -1982,6 +2778,40 @@ func (d *Document) parseSectionProperties(decoder *xml.Decoder, startElement xml
 						LinePitch: linePitch,
 						CharSpace: charSpace,
 					}
+				}
+				if err := d.skipElement(decoder, t.Name.Local); err != nil {
+					return nil, err
+				}
+			case "headerReference":
+				ref := &HeaderFooterReference{
+					Type: getAttributeValue(t.Attr, "type"),
+					ID:   getAttributeValue(t.Attr, "id"),
+				}
+				if ref.Type == "" {
+					ref.Type = getAttributeValue(t.Attr, "w:type")
+				}
+				if ref.ID == "" {
+					ref.ID = getAttributeValue(t.Attr, "r:id")
+				}
+				if ref.ID != "" || ref.Type != "" {
+					sectPr.HeaderReferences = append(sectPr.HeaderReferences, ref)
+				}
+				if err := d.skipElement(decoder, t.Name.Local); err != nil {
+					return nil, err
+				}
+			case "footerReference":
+				ref := &FooterReference{
+					Type: getAttributeValue(t.Attr, "type"),
+					ID:   getAttributeValue(t.Attr, "id"),
+				}
+				if ref.Type == "" {
+					ref.Type = getAttributeValue(t.Attr, "w:type")
+				}
+				if ref.ID == "" {
+					ref.ID = getAttributeValue(t.Attr, "r:id")
+				}
+				if ref.ID != "" || ref.Type != "" {
+					sectPr.FooterReferences = append(sectPr.FooterReferences, ref)
 				}
 				if err := d.skipElement(decoder, t.Name.Local); err != nil {
 					return nil, err
@@ -2182,6 +3012,48 @@ func (d *Document) serializeStyles() error {
 	return nil
 }
 
+// parseContentTypes 解析内容类型文件
+func (d *Document) parseContentTypes() error {
+	Debugf("开始解析内容类型文件")
+
+	// 查找内容类型文件
+	contentTypesData, ok := d.parts["[Content_Types].xml"]
+	if !ok {
+		return WrapError("parse_content_types", fmt.Errorf("内容类型文件不存在"))
+	}
+
+	// 解析XML
+	var contentTypes ContentTypes
+	if err := xml.Unmarshal(contentTypesData, &contentTypes); err != nil {
+		return WrapError("parse_content_types", err)
+	}
+
+	d.contentTypes = &contentTypes
+	Debugf("内容类型解析完成")
+	return nil
+}
+
+// parseRelationships 解析关系文件
+func (d *Document) parseRelationships() error {
+	Debugf("开始解析关系文件")
+
+	// 查找关系文件
+	relsData, ok := d.parts["_rels/.rels"]
+	if !ok {
+		return WrapError("parse_relationships", fmt.Errorf("关系文件不存在"))
+	}
+
+	// 解析XML
+	var relationships Relationships
+	if err := xml.Unmarshal(relsData, &relationships); err != nil {
+		return WrapError("parse_relationships", err)
+	}
+
+	d.relationships = &relationships
+	Debugf("关系解析完成")
+	return nil
+}
+
 // parseStyles 解析样式文件
 func (d *Document) parseStyles() error {
 	Debugf("开始解析样式文件")
@@ -2199,6 +3071,66 @@ func (d *Document) parseStyles() error {
 
 	Debugf("样式解析完成")
 	return nil
+}
+
+// parseDocumentRelationships 解析文档关系文件（word/_rels/document.xml.rels）
+// 该文件包含文档中图片、页眉、页脚等资源的关系
+func (d *Document) parseDocumentRelationships() error {
+	Debugf("开始解析文档关系文件")
+
+	// 查找文档关系文件
+	docRelsData, ok := d.parts["word/_rels/document.xml.rels"]
+	if !ok {
+		// 文档可能没有关系文件（没有图片等资源），这不是错误
+		Debugf("文档关系文件不存在，文档可能不包含图片等资源")
+		return nil
+	}
+
+	// 解析XML
+	var relationships Relationships
+	if err := xml.Unmarshal(docRelsData, &relationships); err != nil {
+		return WrapError("parse_document_relationships", err)
+	}
+
+	// 保存解析的关系（不包括styles.xml，因为它在serializeDocumentRelationships中会自动添加）
+	// 过滤掉styles.xml的关系，因为它总是rId1并在保存时自动添加
+	filteredRels := make([]Relationship, 0)
+	for _, rel := range relationships.Relationships {
+		if rel.Type != "http://schemas.openxmlformats.org/officeDocument/2006/relationships/styles" {
+			filteredRels = append(filteredRels, rel)
+		}
+	}
+
+	d.documentRelationships.Relationships = filteredRels
+	Debugf("文档关系解析完成，共 %d 个关系", len(filteredRels))
+	return nil
+}
+
+// updateNextImageID 根据已有的图片关系更新nextImageID计数器
+// 确保新添加的图片ID不会与现有图片冲突
+func (d *Document) updateNextImageID() {
+	maxImageID := -1
+
+	// 遍历所有parts，查找已存在的图片文件的最大ID
+	for partName := range d.parts {
+		// 检查是否是图片文件（word/media/imageN.xxx）
+		if len(partName) > 11 && partName[:11] == "word/media/" {
+			// 从文件名中提取图片ID（image0.png -> 0, image1.png -> 1等）
+			filename := partName[11:] // 去掉"word/media/"前缀
+			var id int
+			if _, err := fmt.Sscanf(filename, "image%d.", &id); err == nil {
+				if id > maxImageID {
+					maxImageID = id
+				}
+			}
+		}
+	}
+
+	// 设置nextImageID为最大图片ID + 1
+	// 如果没有现有图片，maxImageID为-1，nextImageID应该为0
+	d.nextImageID = maxImageID + 1
+
+	Debugf("更新图片ID计数器: nextImageID = %d", d.nextImageID)
 }
 
 // ToBytes 将文档转换为字节数组
@@ -2268,6 +3200,94 @@ func (b *Body) GetTables() []*Table {
 // AddElement 添加元素到文档主体
 func (b *Body) AddElement(element interface{}) {
 	b.Elements = append(b.Elements, element)
+}
+
+// RemoveParagraph 从文档中删除指定的段落。
+//
+// 参数 paragraph 是要删除的段落对象。
+// 如果段落不存在于文档中，此方法不会产生任何效果。
+//
+// 返回值表示是否成功删除段落。
+//
+// 示例:
+//
+//	doc := document.New()
+//	para := doc.AddParagraph("要删除的段落")
+//	doc.RemoveParagraph(para)
+func (d *Document) RemoveParagraph(paragraph *Paragraph) bool {
+	for i, element := range d.Body.Elements {
+		if p, ok := element.(*Paragraph); ok && p == paragraph {
+			// 删除元素
+			d.Body.Elements = append(d.Body.Elements[:i], d.Body.Elements[i+1:]...)
+			Debugf("删除段落: 索引 %d", i)
+			return true
+		}
+	}
+	Debugf("警告：未找到要删除的段落")
+	return false
+}
+
+// RemoveParagraphAt 根据索引删除段落。
+//
+// 参数 index 是要删除的段落在所有段落中的索引（从0开始）。
+// 如果索引超出范围，此方法会返回错误。
+//
+// 返回值表示是否成功删除段落。
+//
+// 示例:
+//
+//	doc := document.New()
+//	doc.AddParagraph("第一段")
+//	doc.AddParagraph("第二段")
+//	doc.RemoveParagraphAt(0)  // 删除第一段
+func (d *Document) RemoveParagraphAt(index int) bool {
+	// 提前验证负数索引
+	if index < 0 {
+		Debugf("错误：段落索引不能为负数: %d", index)
+		return false
+	}
+
+	// 优化：单次遍历找到目标段落及其元素索引
+	paragraphCount := 0
+	for i, element := range d.Body.Elements {
+		if _, ok := element.(*Paragraph); ok {
+			if paragraphCount == index {
+				// 找到目标段落，删除它
+				d.Body.Elements = append(d.Body.Elements[:i], d.Body.Elements[i+1:]...)
+				Debugf("删除段落: 段落索引 %d, 元素索引 %d", index, i)
+				return true
+			}
+			paragraphCount++
+		}
+	}
+
+	Debugf("错误：段落索引 %d 超出范围 [0, %d)", index, paragraphCount)
+	return false
+}
+
+// RemoveElementAt 根据元素索引删除元素（包括段落、表格等）。
+//
+// 参数 index 是要删除的元素在文档主体中的索引（从0开始）。
+// 如果索引超出范围，此方法会返回错误。
+//
+// 返回值表示是否成功删除元素。
+//
+// 示例:
+//
+//	doc := document.New()
+//	doc.AddParagraph("段落")
+//	doc.AddTable(&document.TableConfig{Rows: 2, Cols: 2})
+//	doc.RemoveElementAt(0)  // 删除第一个元素（段落）
+func (d *Document) RemoveElementAt(index int) bool {
+	if index < 0 || index >= len(d.Body.Elements) {
+		Debugf("错误：元素索引 %d 超出范围 [0, %d)", index, len(d.Body.Elements))
+		return false
+	}
+
+	// 删除元素
+	d.Body.Elements = append(d.Body.Elements[:index], d.Body.Elements[index+1:]...)
+	Debugf("删除元素: 索引 %d", index)
+	return true
 }
 
 // parseTableBorders 解析表格边框
@@ -2601,6 +3621,565 @@ func (d *Document) parseTableRowProperties(decoder *xml.Decoder) (*TableRowPrope
 		case xml.EndElement:
 			if t.Name.Local == "trPr" {
 				return props, nil
+			}
+		}
+	}
+}
+
+// parseDrawingElement 解析绘图元素（图片等）
+// 此方法用于从XML中解析完整的绘图元素结构
+func (d *Document) parseDrawingElement(decoder *xml.Decoder, startElement xml.StartElement) (*DrawingElement, error) {
+	drawing := &DrawingElement{}
+
+	for {
+		token, err := decoder.Token()
+		if err != nil {
+			return nil, WrapError("parse_drawing_element", err)
+		}
+
+		switch t := token.(type) {
+		case xml.StartElement:
+			switch t.Name.Local {
+			case "inline":
+				// 解析嵌入式绘图
+				inline, err := d.parseInlineDrawing(decoder, t)
+				if err != nil {
+					return nil, err
+				}
+				drawing.Inline = inline
+			case "anchor":
+				// 解析浮动绘图
+				anchor, err := d.parseAnchorDrawing(decoder, t)
+				if err != nil {
+					return nil, err
+				}
+				drawing.Anchor = anchor
+			default:
+				if err := d.skipElement(decoder, t.Name.Local); err != nil {
+					return nil, err
+				}
+			}
+		case xml.EndElement:
+			if t.Name.Local == "drawing" {
+				return drawing, nil
+			}
+		}
+	}
+}
+
+// parseInlineDrawing 解析嵌入式绘图
+func (d *Document) parseInlineDrawing(decoder *xml.Decoder, startElement xml.StartElement) (*InlineDrawing, error) {
+	inline := &InlineDrawing{}
+
+	// 解析属性
+	for _, attr := range startElement.Attr {
+		switch attr.Name.Local {
+		case "distT":
+			inline.DistT = attr.Value
+		case "distB":
+			inline.DistB = attr.Value
+		case "distL":
+			inline.DistL = attr.Value
+		case "distR":
+			inline.DistR = attr.Value
+		}
+	}
+
+	for {
+		token, err := decoder.Token()
+		if err != nil {
+			return nil, WrapError("parse_inline_drawing", err)
+		}
+
+		switch t := token.(type) {
+		case xml.StartElement:
+			switch t.Name.Local {
+			case "extent":
+				extent := &DrawingExtent{}
+				for _, attr := range t.Attr {
+					switch attr.Name.Local {
+					case "cx":
+						extent.Cx = attr.Value
+					case "cy":
+						extent.Cy = attr.Value
+					}
+				}
+				inline.Extent = extent
+				if err := d.skipElement(decoder, t.Name.Local); err != nil {
+					return nil, err
+				}
+			case "docPr":
+				docPr := &DrawingDocPr{}
+				for _, attr := range t.Attr {
+					switch attr.Name.Local {
+					case "id":
+						docPr.ID = attr.Value
+					case "name":
+						docPr.Name = attr.Value
+					case "descr":
+						docPr.Descr = attr.Value
+					case "title":
+						docPr.Title = attr.Value
+					}
+				}
+				inline.DocPr = docPr
+				if err := d.skipElement(decoder, t.Name.Local); err != nil {
+					return nil, err
+				}
+			case "graphic":
+				graphic, err := d.parseDrawingGraphic(decoder, t)
+				if err != nil {
+					return nil, err
+				}
+				inline.Graphic = graphic
+			default:
+				if err := d.skipElement(decoder, t.Name.Local); err != nil {
+					return nil, err
+				}
+			}
+		case xml.EndElement:
+			if t.Name.Local == "inline" {
+				return inline, nil
+			}
+		}
+	}
+}
+
+// parseAnchorDrawing 解析浮动绘图
+func (d *Document) parseAnchorDrawing(decoder *xml.Decoder, startElement xml.StartElement) (*AnchorDrawing, error) {
+	anchor := &AnchorDrawing{}
+
+	// 解析属性
+	for _, attr := range startElement.Attr {
+		switch attr.Name.Local {
+		case "distT":
+			anchor.DistT = attr.Value
+		case "distB":
+			anchor.DistB = attr.Value
+		case "distL":
+			anchor.DistL = attr.Value
+		case "distR":
+			anchor.DistR = attr.Value
+		case "simplePos":
+			anchor.SimplePos = attr.Value
+		case "relativeHeight":
+			anchor.RelativeHeight = attr.Value
+		case "behindDoc":
+			anchor.BehindDoc = attr.Value
+		case "locked":
+			anchor.Locked = attr.Value
+		case "layoutInCell":
+			anchor.LayoutInCell = attr.Value
+		case "allowOverlap":
+			anchor.AllowOverlap = attr.Value
+		}
+	}
+
+	for {
+		token, err := decoder.Token()
+		if err != nil {
+			return nil, WrapError("parse_anchor_drawing", err)
+		}
+
+		switch t := token.(type) {
+		case xml.StartElement:
+			switch t.Name.Local {
+			case "extent":
+				extent := &DrawingExtent{}
+				for _, attr := range t.Attr {
+					switch attr.Name.Local {
+					case "cx":
+						extent.Cx = attr.Value
+					case "cy":
+						extent.Cy = attr.Value
+					}
+				}
+				anchor.Extent = extent
+				if err := d.skipElement(decoder, t.Name.Local); err != nil {
+					return nil, err
+				}
+			case "docPr":
+				docPr := &DrawingDocPr{}
+				for _, attr := range t.Attr {
+					switch attr.Name.Local {
+					case "id":
+						docPr.ID = attr.Value
+					case "name":
+						docPr.Name = attr.Value
+					case "descr":
+						docPr.Descr = attr.Value
+					case "title":
+						docPr.Title = attr.Value
+					}
+				}
+				anchor.DocPr = docPr
+				if err := d.skipElement(decoder, t.Name.Local); err != nil {
+					return nil, err
+				}
+			case "graphic":
+				graphic, err := d.parseDrawingGraphic(decoder, t)
+				if err != nil {
+					return nil, err
+				}
+				anchor.Graphic = graphic
+			case "wrapNone":
+				anchor.WrapNone = &WrapNone{}
+				if err := d.skipElement(decoder, t.Name.Local); err != nil {
+					return nil, err
+				}
+			case "wrapSquare":
+				wrapSquare := &WrapSquare{}
+				for _, attr := range t.Attr {
+					switch attr.Name.Local {
+					case "wrapText":
+						wrapSquare.WrapText = attr.Value
+					case "distT":
+						wrapSquare.DistT = attr.Value
+					case "distB":
+						wrapSquare.DistB = attr.Value
+					case "distL":
+						wrapSquare.DistL = attr.Value
+					case "distR":
+						wrapSquare.DistR = attr.Value
+					}
+				}
+				anchor.WrapSquare = wrapSquare
+				if err := d.skipElement(decoder, t.Name.Local); err != nil {
+					return nil, err
+				}
+			default:
+				if err := d.skipElement(decoder, t.Name.Local); err != nil {
+					return nil, err
+				}
+			}
+		case xml.EndElement:
+			if t.Name.Local == "anchor" {
+				return anchor, nil
+			}
+		}
+	}
+}
+
+// parseDrawingGraphic 解析绘图图形元素
+func (d *Document) parseDrawingGraphic(decoder *xml.Decoder, startElement xml.StartElement) (*DrawingGraphic, error) {
+	graphic := &DrawingGraphic{}
+
+	// 解析xmlns属性
+	for _, attr := range startElement.Attr {
+		// 检查xmlns属性（命名空间声明）
+		if attr.Name.Space == "xmlns" || (attr.Name.Space == "" && strings.HasPrefix(attr.Name.Local, "xmlns")) {
+			if attr.Value == "http://schemas.openxmlformats.org/drawingml/2006/main" {
+				graphic.Xmlns = attr.Value
+			}
+		}
+	}
+
+	for {
+		token, err := decoder.Token()
+		if err != nil {
+			return nil, WrapError("parse_drawing_graphic", err)
+		}
+
+		switch t := token.(type) {
+		case xml.StartElement:
+			switch t.Name.Local {
+			case "graphicData":
+				graphicData, err := d.parseGraphicData(decoder, t)
+				if err != nil {
+					return nil, err
+				}
+				graphic.GraphicData = graphicData
+			default:
+				if err := d.skipElement(decoder, t.Name.Local); err != nil {
+					return nil, err
+				}
+			}
+		case xml.EndElement:
+			if t.Name.Local == "graphic" {
+				return graphic, nil
+			}
+		}
+	}
+}
+
+// parseGraphicData 解析图形数据元素
+func (d *Document) parseGraphicData(decoder *xml.Decoder, startElement xml.StartElement) (*GraphicData, error) {
+	graphicData := &GraphicData{}
+
+	// 解析属性
+	for _, attr := range startElement.Attr {
+		if attr.Name.Local == "uri" {
+			graphicData.Uri = attr.Value
+		}
+	}
+
+	for {
+		token, err := decoder.Token()
+		if err != nil {
+			return nil, WrapError("parse_graphic_data", err)
+		}
+
+		switch t := token.(type) {
+		case xml.StartElement:
+			switch t.Name.Local {
+			case "pic":
+				pic, err := d.parsePicElement(decoder, t)
+				if err != nil {
+					return nil, err
+				}
+				graphicData.Pic = pic
+			default:
+				if err := d.skipElement(decoder, t.Name.Local); err != nil {
+					return nil, err
+				}
+			}
+		case xml.EndElement:
+			if t.Name.Local == "graphicData" {
+				return graphicData, nil
+			}
+		}
+	}
+}
+
+// parsePicElement 解析图片元素
+func (d *Document) parsePicElement(decoder *xml.Decoder, startElement xml.StartElement) (*PicElement, error) {
+	pic := &PicElement{}
+
+	// 解析xmlns属性
+	for _, attr := range startElement.Attr {
+		// 检查xmlns属性（命名空间声明）
+		if attr.Name.Space == "xmlns" || (attr.Name.Space == "" && strings.HasPrefix(attr.Name.Local, "xmlns")) {
+			if attr.Value == "http://schemas.openxmlformats.org/drawingml/2006/picture" {
+				pic.Xmlns = attr.Value
+			}
+		}
+	}
+
+	for {
+		token, err := decoder.Token()
+		if err != nil {
+			return nil, WrapError("parse_pic_element", err)
+		}
+
+		switch t := token.(type) {
+		case xml.StartElement:
+			switch t.Name.Local {
+			case "nvPicPr":
+				nvPicPr, err := d.parseNvPicPr(decoder, t)
+				if err != nil {
+					return nil, err
+				}
+				pic.NvPicPr = nvPicPr
+			case "blipFill":
+				blipFill, err := d.parseBlipFill(decoder, t)
+				if err != nil {
+					return nil, err
+				}
+				pic.BlipFill = blipFill
+			case "spPr":
+				spPr, err := d.parseSpPr(decoder, t)
+				if err != nil {
+					return nil, err
+				}
+				pic.SpPr = spPr
+			default:
+				if err := d.skipElement(decoder, t.Name.Local); err != nil {
+					return nil, err
+				}
+			}
+		case xml.EndElement:
+			if t.Name.Local == "pic" {
+				return pic, nil
+			}
+		}
+	}
+}
+
+// parseNvPicPr 解析非可视图片属性
+func (d *Document) parseNvPicPr(decoder *xml.Decoder, startElement xml.StartElement) (*NvPicPr, error) {
+	nvPicPr := &NvPicPr{}
+
+	for {
+		token, err := decoder.Token()
+		if err != nil {
+			return nil, WrapError("parse_nv_pic_pr", err)
+		}
+
+		switch t := token.(type) {
+		case xml.StartElement:
+			switch t.Name.Local {
+			case "cNvPr":
+				cNvPr := &CNvPr{}
+				for _, attr := range t.Attr {
+					switch attr.Name.Local {
+					case "id":
+						cNvPr.ID = attr.Value
+					case "name":
+						cNvPr.Name = attr.Value
+					case "descr":
+						cNvPr.Descr = attr.Value
+					case "title":
+						cNvPr.Title = attr.Value
+					}
+				}
+				nvPicPr.CNvPr = cNvPr
+				if err := d.skipElement(decoder, t.Name.Local); err != nil {
+					return nil, err
+				}
+			case "cNvPicPr":
+				cNvPicPr := &CNvPicPr{}
+				// 解析picLocks如果存在
+				nvPicPr.CNvPicPr = cNvPicPr
+				if err := d.skipElement(decoder, t.Name.Local); err != nil {
+					return nil, err
+				}
+			default:
+				if err := d.skipElement(decoder, t.Name.Local); err != nil {
+					return nil, err
+				}
+			}
+		case xml.EndElement:
+			if t.Name.Local == "nvPicPr" {
+				return nvPicPr, nil
+			}
+		}
+	}
+}
+
+// parseBlipFill 解析图片填充
+func (d *Document) parseBlipFill(decoder *xml.Decoder, startElement xml.StartElement) (*BlipFill, error) {
+	blipFill := &BlipFill{}
+
+	for {
+		token, err := decoder.Token()
+		if err != nil {
+			return nil, WrapError("parse_blip_fill", err)
+		}
+
+		switch t := token.(type) {
+		case xml.StartElement:
+			switch t.Name.Local {
+			case "blip":
+				blip := &Blip{}
+				for _, attr := range t.Attr {
+					if attr.Name.Local == "embed" {
+						blip.Embed = attr.Value
+					}
+				}
+				blipFill.Blip = blip
+				if err := d.skipElement(decoder, t.Name.Local); err != nil {
+					return nil, err
+				}
+			case "stretch":
+				blipFill.Stretch = &Stretch{FillRect: &FillRect{}}
+				if err := d.skipElement(decoder, t.Name.Local); err != nil {
+					return nil, err
+				}
+			default:
+				if err := d.skipElement(decoder, t.Name.Local); err != nil {
+					return nil, err
+				}
+			}
+		case xml.EndElement:
+			if t.Name.Local == "blipFill" {
+				return blipFill, nil
+			}
+		}
+	}
+}
+
+// parseSpPr 解析形状属性
+func (d *Document) parseSpPr(decoder *xml.Decoder, startElement xml.StartElement) (*SpPr, error) {
+	spPr := &SpPr{}
+
+	for {
+		token, err := decoder.Token()
+		if err != nil {
+			return nil, WrapError("parse_sp_pr", err)
+		}
+
+		switch t := token.(type) {
+		case xml.StartElement:
+			switch t.Name.Local {
+			case "xfrm":
+				xfrm, err := d.parseXfrm(decoder, t)
+				if err != nil {
+					return nil, err
+				}
+				spPr.Xfrm = xfrm
+			case "prstGeom":
+				prstGeom := &PrstGeom{AvLst: &AvLst{}}
+				for _, attr := range t.Attr {
+					if attr.Name.Local == "prst" {
+						prstGeom.Prst = attr.Value
+					}
+				}
+				spPr.PrstGeom = prstGeom
+				if err := d.skipElement(decoder, t.Name.Local); err != nil {
+					return nil, err
+				}
+			default:
+				if err := d.skipElement(decoder, t.Name.Local); err != nil {
+					return nil, err
+				}
+			}
+		case xml.EndElement:
+			if t.Name.Local == "spPr" {
+				return spPr, nil
+			}
+		}
+	}
+}
+
+// parseXfrm 解析变换元素
+func (d *Document) parseXfrm(decoder *xml.Decoder, startElement xml.StartElement) (*Xfrm, error) {
+	xfrm := &Xfrm{}
+
+	for {
+		token, err := decoder.Token()
+		if err != nil {
+			return nil, WrapError("parse_xfrm", err)
+		}
+
+		switch t := token.(type) {
+		case xml.StartElement:
+			switch t.Name.Local {
+			case "off":
+				off := &Off{}
+				for _, attr := range t.Attr {
+					switch attr.Name.Local {
+					case "x":
+						off.X = attr.Value
+					case "y":
+						off.Y = attr.Value
+					}
+				}
+				xfrm.Off = off
+				if err := d.skipElement(decoder, t.Name.Local); err != nil {
+					return nil, err
+				}
+			case "ext":
+				ext := &Ext{}
+				for _, attr := range t.Attr {
+					switch attr.Name.Local {
+					case "cx":
+						ext.Cx = attr.Value
+					case "cy":
+						ext.Cy = attr.Value
+					}
+				}
+				xfrm.Ext = ext
+				if err := d.skipElement(decoder, t.Name.Local); err != nil {
+					return nil, err
+				}
+			default:
+				if err := d.skipElement(decoder, t.Name.Local); err != nil {
+					return nil, err
+				}
+			}
+		case xml.EndElement:
+			if t.Name.Local == "xfrm" {
+				return xfrm, nil
 			}
 		}
 	}

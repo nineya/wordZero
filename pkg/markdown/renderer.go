@@ -10,6 +10,9 @@ import (
 
 	// 添加goldmark扩展的AST节点支持
 	extast "github.com/yuin/goldmark/extension/ast"
+
+	// 添加数学公式支持
+	mathjax "github.com/litao91/goldmark-mathjax"
 )
 
 // WordRenderer Word文档渲染器
@@ -98,6 +101,17 @@ func (r *WordRenderer) Render(doc ast.Node) error {
 			return ast.WalkContinue, nil
 
 		default:
+			// 检查是否为数学公式节点
+			if r.opts.EnableMath {
+				// 检查块级数学公式
+				if node.Kind() == mathjax.KindMathBlock {
+					return r.renderMathBlock(node)
+				}
+				// 检查行内数学公式
+				if node.Kind() == mathjax.KindInlineMath {
+					return r.renderInlineMath(node)
+				}
+			}
 			// 对于不支持的节点类型，记录错误但继续处理
 			if r.opts.ErrorCallback != nil {
 				r.opts.ErrorCallback(NewConversionError("UnsupportedNode", "unsupported markdown node type", 0, 0, nil))
@@ -153,6 +167,13 @@ func (r *WordRenderer) renderInlineContent(node ast.Node, para *document.Paragra
 			text := string(n.Segment.Value(r.source))
 			para.AddFormattedText(text, nil)
 
+			// 处理软换行（单个\n）
+			// goldmark将单个\n解析为多个Text节点，第一个节点的SoftLineBreak为true
+			// 在Markdown中，软换行通常应该被渲染为空格
+			if n.SoftLineBreak() {
+				para.AddFormattedText(" ", nil)
+			}
+
 		case *ast.Emphasis:
 			text := r.extractTextContent(n)
 			// goldmark中，level=1是斜体，level=2是粗体
@@ -185,8 +206,20 @@ func (r *WordRenderer) renderInlineContent(node ast.Node, para *document.Paragra
 
 		case *ast.Image:
 			r.renderImageInline(n, para)
+		case *extast.Strikethrough:
+			// 处理删除线
+			text := r.extractTextContent(n)
+			format := &document.TextFormat{
+				Strike: true,
+			}
+			para.AddFormattedText(text, format)
 
 		default:
+			// 检查是否为行内数学公式
+			if r.opts.EnableMath && child.Kind() == mathjax.KindInlineMath {
+				r.renderInlineMathToParagraph(child, para)
+				continue
+			}
 			// 对于其他类型，尝试提取文本内容
 			text := r.extractTextContent(n)
 			if text != "" {
@@ -405,11 +438,33 @@ func (r *WordRenderer) renderTable(node *extast.Table) (ast.WalkStatus, error) {
 	var hasHeader bool
 	var tableData [][]string
 	var alignments []extast.Alignment
+	var emphases [][]int
+
+	// 遍历表头
+	for child := node.FirstChild(); child != nil; child = child.NextSibling() {
+		if row, ok := child.(*extast.TableHeader); ok {
+			var rowData []string
+			var rowEmphasis []int
+			// 遍历表头单元格
+			for cellChild := row.FirstChild(); cellChild != nil; cellChild = cellChild.NextSibling() {
+				if cell, ok := cellChild.(*extast.TableCell); ok {
+					cellText := r.extractTextContent(cell)
+					rowData = append(rowData, cellText)
+					//表头默认粗体
+					rowEmphasis = append(rowEmphasis, 2)
+				}
+			}
+			tableData = append(tableData, rowData)
+			emphases = append(emphases, rowEmphasis)
+			hasHeader = true
+		}
+	}
 
 	// 遍历表格行
 	for child := node.FirstChild(); child != nil; child = child.NextSibling() {
 		if row, ok := child.(*extast.TableRow); ok {
 			var rowData []string
+			var rowEmphasis []int
 			if len(alignments) == 0 {
 				// 从第一行获取对齐方式
 				alignments = row.Alignments
@@ -420,6 +475,8 @@ func (r *WordRenderer) renderTable(node *extast.Table) (ast.WalkStatus, error) {
 				if cell, ok := cellChild.(*extast.TableCell); ok {
 					cellText := r.extractTextContent(cell)
 					rowData = append(rowData, cellText)
+					emphasis := extractCellEmphasis(cell)
+					rowEmphasis = append(rowEmphasis, emphasis)
 				}
 			}
 			tableData = append(tableData, rowData)
@@ -439,6 +496,7 @@ func (r *WordRenderer) renderTable(node *extast.Table) (ast.WalkStatus, error) {
 				}
 			}
 			tableData = append(tableData, rowData)
+			emphases = append(emphases, rowEmphasis)
 		}
 	}
 
@@ -457,10 +515,11 @@ func (r *WordRenderer) renderTable(node *extast.Table) (ast.WalkStatus, error) {
 
 	// 创建表格配置
 	config := &document.TableConfig{
-		Rows:  len(tableData),
-		Cols:  cols,
-		Width: 9000, // 默认宽度（磅）
-		Data:  tableData,
+		Rows:     len(tableData),
+		Cols:     cols,
+		Width:    9000, // 默认宽度（磅）
+		Data:     tableData,
+		Emphases: emphases,
 	}
 
 	// 添加表格到文档
@@ -477,7 +536,10 @@ func (r *WordRenderer) renderTable(node *extast.Table) (ast.WalkStatus, error) {
 			})
 		}
 	}
-	table := r.doc.AddTable(config)
+	table, err := r.doc.AddTable(config)
+	if err != nil && r.opts.ErrorCallback != nil {
+		r.opts.ErrorCallback(NewConversionError("AddTable", err.Error(), 0, 0, err))
+	}
 	if table != nil {
 		// 设置表头样式（如果有的话）
 		if hasHeader {
@@ -517,6 +579,27 @@ func (r *WordRenderer) renderTable(node *extast.Table) (ast.WalkStatus, error) {
 	}
 
 	return ast.WalkSkipChildren, nil
+}
+
+// 处理单元格样式
+func extractCellEmphasis(cell *extast.TableCell) int {
+	format := 0 // 0表示无格式
+	// 遍历单元格内容
+	ast.Walk(cell, func(n ast.Node, entering bool) (ast.WalkStatus, error) {
+		if !entering {
+			return ast.WalkContinue, nil
+		}
+
+		switch node := n.(type) {
+		case *ast.Emphasis:
+			// 处理强调文本（粗体或斜体）
+			format = node.Level
+		}
+
+		return ast.WalkContinue, nil
+	})
+
+	return format
 }
 
 // renderTaskCheckBox 渲染任务列表复选框 ✨ 新增功能
@@ -561,6 +644,11 @@ func (r *WordRenderer) renderTaskItemContent(parent ast.Node, para *document.Par
 		case *ast.Text:
 			text := string(n.Segment.Value(r.source))
 			para.AddFormattedText(text, nil)
+
+			// 处理软换行（单个\n）
+			if n.SoftLineBreak() {
+				para.AddFormattedText(" ", nil)
+			}
 		case *ast.Emphasis:
 			text := r.extractTextContent(n)
 			if n.Level == 2 {
@@ -583,6 +671,11 @@ func (r *WordRenderer) renderTaskItemContent(parent ast.Node, para *document.Par
 			}
 			para.AddFormattedText(text, format)
 		default:
+			// 检查是否为行内数学公式
+			if r.opts.EnableMath && child.Kind() == mathjax.KindInlineMath {
+				r.renderInlineMathToParagraph(child, para)
+				continue
+			}
 			// 对于其他类型，尝试提取文本内容
 			text := r.extractTextContent(n)
 			if text != "" {
@@ -590,4 +683,377 @@ func (r *WordRenderer) renderTaskItemContent(parent ast.Node, para *document.Par
 			}
 		}
 	}
+}
+
+// renderInlineMathToParagraph 将行内数学公式渲染到段落中
+func (r *WordRenderer) renderInlineMathToParagraph(node ast.Node, para *document.Paragraph) {
+	latex := r.extractMathContent(node)
+	para.AddFormattedText(latex, &document.TextFormat{
+		FontFamily: "Cambria Math",
+	})
+}
+
+// renderMathBlock 渲染块级数学公式
+func (r *WordRenderer) renderMathBlock(node ast.Node) (ast.WalkStatus, error) {
+	// 提取LaTeX内容
+	latex := r.extractMathContent(node)
+
+	// 创建包含公式的段落
+	para := r.doc.AddParagraph("")
+	para.SetAlignment(document.AlignCenter)
+
+	// 添加公式内容（使用Cambria Math字体以获得更好的数学符号显示）
+	para.AddFormattedText(latex, &document.TextFormat{
+		FontFamily: "Cambria Math",
+		FontSize:   12,
+	})
+
+	return ast.WalkSkipChildren, nil
+}
+
+// renderInlineMath 渲染行内数学公式
+func (r *WordRenderer) renderInlineMath(node ast.Node) (ast.WalkStatus, error) {
+	// 行内公式通常由父节点处理（在renderInlineContent中）
+	// 如果直接调用此方法，创建一个新段落
+	para := r.doc.AddParagraph("")
+	r.renderInlineMathToParagraph(node, para)
+
+	return ast.WalkSkipChildren, nil
+}
+
+// extractMathContent 从数学节点中提取LaTeX内容
+func (r *WordRenderer) extractMathContent(node ast.Node) string {
+	var content strings.Builder
+
+	// 检查是否为块级节点（MathBlock）
+	if node.Kind() == mathjax.KindMathBlock {
+		// MathBlock是块级节点，可以安全地访问Lines()
+		if blockNode, ok := node.(ast.Node); ok {
+			lines := blockNode.Lines()
+			if lines != nil {
+				for i := 0; i < lines.Len(); i++ {
+					line := lines.At(i)
+					content.Write(line.Value(r.source))
+				}
+			}
+		}
+	}
+
+	// 如果没有行内容（可能是行内公式），尝试从子节点提取
+	if content.Len() == 0 {
+		for child := node.FirstChild(); child != nil; child = child.NextSibling() {
+			if text, ok := child.(*ast.Text); ok {
+				content.Write(text.Segment.Value(r.source))
+			}
+		}
+	}
+
+	latex := strings.TrimSpace(content.String())
+
+	// 转换常见的LaTeX命令为Unicode字符以获得更好的显示效果
+	latex = convertLaTeXToDisplay(latex)
+
+	return latex
+}
+
+// convertLaTeXToDisplay 将LaTeX命令转换为可显示的Unicode字符
+func convertLaTeXToDisplay(latex string) string {
+	// 处理分数：\frac{a}{b} -> a/b 或 (a)/(b)
+	fracPattern := regexp.MustCompile(`\\frac\s*\{([^{}]*(?:\{[^{}]*\}[^{}]*)*)\}\s*\{([^{}]*(?:\{[^{}]*\}[^{}]*)*)\}`)
+	for fracPattern.MatchString(latex) {
+		latex = fracPattern.ReplaceAllStringFunc(latex, func(match string) string {
+			parts := fracPattern.FindStringSubmatch(match)
+			if len(parts) == 3 {
+				num := convertLaTeXToDisplay(parts[1])
+				den := convertLaTeXToDisplay(parts[2])
+				// 使用分数斜线字符来表示分数
+				return "(" + num + ")/(" + den + ")"
+			}
+			return match
+		})
+	}
+
+	// 处理根号：\sqrt{x} -> √x, \sqrt[n]{x} -> ⁿ√x
+	sqrtPattern := regexp.MustCompile(`\\sqrt\s*(?:\[([^\]]*)\])?\s*\{([^{}]*(?:\{[^{}]*\}[^{}]*)*)\}`)
+	for sqrtPattern.MatchString(latex) {
+		latex = sqrtPattern.ReplaceAllStringFunc(latex, func(match string) string {
+			parts := sqrtPattern.FindStringSubmatch(match)
+			if len(parts) == 3 {
+				deg := parts[1]
+				content := convertLaTeXToDisplay(parts[2])
+				if deg == "" {
+					return "√(" + content + ")"
+				}
+				// 将根指数转换为上标
+				degSup := convertToSuperscript(deg)
+				return degSup + "√(" + content + ")"
+			}
+			return match
+		})
+	}
+
+	// 处理上标：x^{n} -> xⁿ 或 x^n -> xⁿ
+	supBracePattern := regexp.MustCompile(`\^\{([^{}]*)\}`)
+	latex = supBracePattern.ReplaceAllStringFunc(latex, func(match string) string {
+		parts := supBracePattern.FindStringSubmatch(match)
+		if len(parts) == 2 {
+			return convertToSuperscript(parts[1])
+		}
+		return match
+	})
+	supSimplePattern := regexp.MustCompile(`\^([a-zA-Z0-9])`)
+	latex = supSimplePattern.ReplaceAllStringFunc(latex, func(match string) string {
+		parts := supSimplePattern.FindStringSubmatch(match)
+		if len(parts) == 2 {
+			return convertToSuperscript(parts[1])
+		}
+		return match
+	})
+
+	// 处理下标：x_{n} -> xₙ 或 x_n -> xₙ
+	subBracePattern := regexp.MustCompile(`_\{([^{}]*)\}`)
+	latex = subBracePattern.ReplaceAllStringFunc(latex, func(match string) string {
+		parts := subBracePattern.FindStringSubmatch(match)
+		if len(parts) == 2 {
+			return convertToSubscript(parts[1])
+		}
+		return match
+	})
+	subSimplePattern := regexp.MustCompile(`_([a-zA-Z0-9])`)
+	latex = subSimplePattern.ReplaceAllStringFunc(latex, func(match string) string {
+		parts := subSimplePattern.FindStringSubmatch(match)
+		if len(parts) == 2 {
+			return convertToSubscript(parts[1])
+		}
+		return match
+	})
+
+	// LaTeX命令替换映射
+	replacements := map[string]string{
+		// 希腊字母（小写）
+		`\alpha`:   "α",
+		`\beta`:    "β",
+		`\gamma`:   "γ",
+		`\delta`:   "δ",
+		`\epsilon`: "ε",
+		`\zeta`:    "ζ",
+		`\eta`:     "η",
+		`\theta`:   "θ",
+		`\iota`:    "ι",
+		`\kappa`:   "κ",
+		`\lambda`:  "λ",
+		`\mu`:      "μ",
+		`\nu`:      "ν",
+		`\xi`:      "ξ",
+		`\pi`:      "π",
+		`\rho`:     "ρ",
+		`\sigma`:   "σ",
+		`\tau`:     "τ",
+		`\upsilon`: "υ",
+		`\phi`:     "φ",
+		`\chi`:     "χ",
+		`\psi`:     "ψ",
+		`\omega`:   "ω",
+
+		// 希腊字母（大写）
+		`\Alpha`:   "Α",
+		`\Beta`:    "Β",
+		`\Gamma`:   "Γ",
+		`\Delta`:   "Δ",
+		`\Epsilon`: "Ε",
+		`\Zeta`:    "Ζ",
+		`\Eta`:     "Η",
+		`\Theta`:   "Θ",
+		`\Iota`:    "Ι",
+		`\Kappa`:   "Κ",
+		`\Lambda`:  "Λ",
+		`\Mu`:      "Μ",
+		`\Nu`:      "Ν",
+		`\Xi`:      "Ξ",
+		`\Pi`:      "Π",
+		`\Rho`:     "Ρ",
+		`\Sigma`:   "Σ",
+		`\Tau`:     "Τ",
+		`\Upsilon`: "Υ",
+		`\Phi`:     "Φ",
+		`\Chi`:     "Χ",
+		`\Psi`:     "Ψ",
+		`\Omega`:   "Ω",
+
+		// 运算符
+		`\times`:  "×",
+		`\div`:    "÷",
+		`\pm`:     "±",
+		`\mp`:     "∓",
+		`\cdot`:   "·",
+		`\ast`:    "∗",
+		`\star`:   "⋆",
+		`\circ`:   "∘",
+		`\bullet`: "•",
+		`\oplus`:  "⊕",
+		`\ominus`: "⊖",
+		`\otimes`: "⊗",
+
+		// 关系符号
+		`\leq`:      "≤",
+		`\le`:       "≤",
+		`\geq`:      "≥",
+		`\ge`:       "≥",
+		`\neq`:      "≠",
+		`\ne`:       "≠",
+		`\approx`:   "≈",
+		`\equiv`:    "≡",
+		`\sim`:      "∼",
+		`\simeq`:    "≃",
+		`\cong`:     "≅",
+		`\propto`:   "∝",
+		`\ll`:       "≪",
+		`\gg`:       "≫",
+		`\subset`:   "⊂",
+		`\supset`:   "⊃",
+		`\subseteq`: "⊆",
+		`\supseteq`: "⊇",
+		`\in`:       "∈",
+		`\notin`:    "∉",
+		`\ni`:       "∋",
+
+		// 箭头
+		`\rightarrow`:     "→",
+		`\leftarrow`:      "←",
+		`\leftrightarrow`: "↔",
+		`\Rightarrow`:     "⇒",
+		`\Leftarrow`:      "⇐",
+		`\Leftrightarrow`: "⇔",
+		`\uparrow`:        "↑",
+		`\downarrow`:      "↓",
+		`\to`:             "→",
+		`\gets`:           "←",
+		`\mapsto`:         "↦",
+
+		// 杂项符号
+		`\infty`:      "∞",
+		`\partial`:    "∂",
+		`\nabla`:      "∇",
+		`\forall`:     "∀",
+		`\exists`:     "∃",
+		`\nexists`:    "∄",
+		`\emptyset`:   "∅",
+		`\varnothing`: "∅",
+		`\neg`:        "¬",
+		`\lnot`:       "¬",
+		`\land`:       "∧",
+		`\lor`:        "∨",
+		`\cap`:        "∩",
+		`\cup`:        "∪",
+		`\int`:        "∫",
+		`\iint`:       "∬",
+		`\iiint`:      "∭",
+		`\oint`:       "∮",
+		`\sum`:        "∑",
+		`\prod`:       "∏",
+		`\coprod`:     "∐",
+
+		// 省略号
+		`\ldots`: "…",
+		`\cdots`: "⋯",
+		`\vdots`: "⋮",
+		`\ddots`: "⋱",
+
+		// 空格
+		`\quad`:  " ",
+		`\qquad`: "  ",
+		`\,`:     " ",
+		`\;`:     " ",
+		`\:`:     " ",
+		`\ `:     " ",
+
+		// 括号
+		`\{`:      "{",
+		`\}`:      "}",
+		`\lbrace`: "{",
+		`\rbrace`: "}",
+		`\langle`: "⟨",
+		`\rangle`: "⟩",
+		`\lceil`:  "⌈",
+		`\rceil`:  "⌉",
+		`\lfloor`: "⌊",
+		`\rfloor`: "⌋",
+		`\left`:   "",
+		`\right`:  "",
+	}
+
+	// 应用替换 - 按长度降序排列，确保较长的命令先被替换
+	// 这样避免 \neq 和 \ne 等命令冲突
+	type replacement struct {
+		cmd     string
+		unicode string
+	}
+	sortedReplacements := make([]replacement, 0, len(replacements))
+	for cmd, u := range replacements {
+		sortedReplacements = append(sortedReplacements, replacement{cmd, u})
+	}
+	// 按命令长度降序排序
+	for i := 0; i < len(sortedReplacements); i++ {
+		for j := i + 1; j < len(sortedReplacements); j++ {
+			if len(sortedReplacements[j].cmd) > len(sortedReplacements[i].cmd) {
+				sortedReplacements[i], sortedReplacements[j] = sortedReplacements[j], sortedReplacements[i]
+			}
+		}
+	}
+	for _, r := range sortedReplacements {
+		latex = strings.ReplaceAll(latex, r.cmd, r.unicode)
+	}
+
+	// 清理多余的花括号
+	latex = strings.ReplaceAll(latex, "{", "")
+	latex = strings.ReplaceAll(latex, "}", "")
+
+	return latex
+}
+
+// convertToSuperscript 将字符串转换为上标形式
+func convertToSuperscript(s string) string {
+	superscripts := map[rune]rune{
+		'0': '⁰', '1': '¹', '2': '²', '3': '³', '4': '⁴',
+		'5': '⁵', '6': '⁶', '7': '⁷', '8': '⁸', '9': '⁹',
+		'+': '⁺', '-': '⁻', '=': '⁼', '(': '⁽', ')': '⁾',
+		'a': 'ᵃ', 'b': 'ᵇ', 'c': 'ᶜ', 'd': 'ᵈ', 'e': 'ᵉ',
+		'f': 'ᶠ', 'g': 'ᵍ', 'h': 'ʰ', 'i': 'ⁱ', 'j': 'ʲ',
+		'k': 'ᵏ', 'l': 'ˡ', 'm': 'ᵐ', 'n': 'ⁿ', 'o': 'ᵒ',
+		'p': 'ᵖ', 'r': 'ʳ', 's': 'ˢ', 't': 'ᵗ', 'u': 'ᵘ',
+		'v': 'ᵛ', 'w': 'ʷ', 'x': 'ˣ', 'y': 'ʸ', 'z': 'ᶻ',
+	}
+
+	var result strings.Builder
+	for _, r := range s {
+		if sup, ok := superscripts[r]; ok {
+			result.WriteRune(sup)
+		} else {
+			result.WriteRune(r)
+		}
+	}
+	return result.String()
+}
+
+// convertToSubscript 将字符串转换为下标形式
+func convertToSubscript(s string) string {
+	subscripts := map[rune]rune{
+		'0': '₀', '1': '₁', '2': '₂', '3': '₃', '4': '₄',
+		'5': '₅', '6': '₆', '7': '₇', '8': '₈', '9': '₉',
+		'+': '₊', '-': '₋', '=': '₌', '(': '₍', ')': '₎',
+		'a': 'ₐ', 'e': 'ₑ', 'h': 'ₕ', 'i': 'ᵢ', 'j': 'ⱼ',
+		'k': 'ₖ', 'l': 'ₗ', 'm': 'ₘ', 'n': 'ₙ', 'o': 'ₒ',
+		'p': 'ₚ', 'r': 'ᵣ', 's': 'ₛ', 't': 'ₜ', 'u': 'ᵤ',
+		'v': 'ᵥ', 'x': 'ₓ',
+	}
+
+	var result strings.Builder
+	for _, r := range s {
+		if sub, ok := subscripts[r]; ok {
+			result.WriteRune(sub)
+		} else {
+			result.WriteRune(r)
+		}
+	}
+	return result.String()
 }

@@ -10,6 +10,7 @@ import (
 	"github.com/yuin/goldmark/parser"
 	"github.com/yuin/goldmark/text"
 
+	mathjax "github.com/litao91/goldmark-mathjax"
 	"github.com/nineya/wordZero/pkg/document"
 )
 
@@ -46,6 +47,13 @@ func NewConverter(opts *ConvertOptions) *Converter {
 	}
 	if opts.EnableFootnotes {
 		extensions = append(extensions, extension.Footnote)
+	}
+	if opts.EnableMath {
+		// 使用标准的LaTeX数学公式分隔符: $...$ 用于行内公式, $$...$$ 用于块级公式
+		extensions = append(extensions, mathjax.NewMathJax(
+			mathjax.WithInlineDelim("$", "$"),
+			mathjax.WithBlockDelim("$$", "$$"),
+		))
 	}
 
 	md := goldmark.New(

@@ -441,6 +441,30 @@ func (d *Document) findTOCStart() int {
 	return -1
 }
 
+// findTOCSDT 查找目录SDT结构
+func (d *Document) findTOCSDT() (*SDT, int) {
+	for i, element := range d.Body.Elements {
+		sdt, ok := element.(*SDT)
+		if !ok {
+			continue
+		}
+
+		// 检查是否是目录SDT
+		if sdt.Properties == nil || sdt.Properties.DocPartObj == nil {
+			continue
+		}
+
+		if sdt.Properties.DocPartObj.DocPartGallery == nil {
+			continue
+		}
+
+		if sdt.Properties.DocPartObj.DocPartGallery.Val == "Table of Contents" {
+			return sdt, i
+		}
+	}
+	return nil, -1
+}
+
 // removeTOCEntries 删除现有目录条目
 func (d *Document) removeTOCEntries(startIndex int) {
 	// 简化处理：从startIndex开始查找并删除所有TOC样式的段落
