@@ -203,7 +203,9 @@ type Run struct {
 
 // MarshalXML 自定义Run的XML序列化
 // 此方法确保只有非空元素才被序列化，特别是对于Drawing元素
-func (r *Run) MarshalXML(e *xml.Encoder, start xml.StartElement) error {
+//
+//	TODO 没有序列化会导致目录的分隔符丢失
+func (r *Run) MarshalXMLBak(e *xml.Encoder, start xml.StartElement) error {
 	// 开始Run元素
 	if err := e.EncodeToken(start); err != nil {
 		return err
